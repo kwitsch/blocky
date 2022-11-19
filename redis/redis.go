@@ -109,6 +109,10 @@ func New(cfg *config.RedisConfig) (*Client, error) {
 	return nil, err
 }
 
+func (c *Client) Set(key string, value interface{}, expiration time.Duration) *redis.StatusCmd {
+	return c.client.Set(c.ctx, key, value, expiration)
+}
+
 // PublishCache publish cache to redis async
 func (c *Client) PublishCache(key string, message *dns.Msg) {
 	if len(key) > 0 && message != nil {

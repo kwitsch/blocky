@@ -54,7 +54,7 @@ var _ = Describe("QueryLoggingResolver", func() {
 	})
 
 	JustBeforeEach(func() {
-		sut = NewQueryLoggingResolver(sutConfig).(*QueryLoggingResolver)
+		sut = NewQueryLoggingResolver(sutConfig, nil).(*QueryLoggingResolver)
 		DeferCleanup(func() { close(sut.logChan) })
 		m = &MockResolver{}
 		m.On("Resolve", mock.Anything).Return(&Response{Res: mockAnswer, Reason: "reason"}, nil)

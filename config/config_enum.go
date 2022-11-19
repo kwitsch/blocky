@@ -176,11 +176,14 @@ const (
 	// QueryLogTypeCsvClient is a QueryLogType of type Csv-Client.
 	// CSV file per day and client
 	QueryLogTypeCsvClient
+	// QueryLogTypeRedis is a QueryLogType of type Redis.
+	// Redis database
+	QueryLogTypeRedis
 )
 
 var ErrInvalidQueryLogType = fmt.Errorf("not a valid QueryLogType, try [%s]", strings.Join(_QueryLogTypeNames, ", "))
 
-const _QueryLogTypeName = "consolenonemysqlpostgresqlcsvcsv-client"
+const _QueryLogTypeName = "consolenonemysqlpostgresqlcsvcsv-clientredis"
 
 var _QueryLogTypeNames = []string{
 	_QueryLogTypeName[0:7],
@@ -189,6 +192,7 @@ var _QueryLogTypeNames = []string{
 	_QueryLogTypeName[16:26],
 	_QueryLogTypeName[26:29],
 	_QueryLogTypeName[29:39],
+	_QueryLogTypeName[39:44],
 }
 
 // QueryLogTypeNames returns a list of possible string values of QueryLogType.
@@ -205,6 +209,7 @@ var _QueryLogTypeMap = map[QueryLogType]string{
 	QueryLogTypePostgresql: _QueryLogTypeName[16:26],
 	QueryLogTypeCsv:        _QueryLogTypeName[26:29],
 	QueryLogTypeCsvClient:  _QueryLogTypeName[29:39],
+	QueryLogTypeRedis:      _QueryLogTypeName[39:44],
 }
 
 // String implements the Stringer interface.
@@ -222,6 +227,7 @@ var _QueryLogTypeValue = map[string]QueryLogType{
 	_QueryLogTypeName[16:26]: QueryLogTypePostgresql,
 	_QueryLogTypeName[26:29]: QueryLogTypeCsv,
 	_QueryLogTypeName[29:39]: QueryLogTypeCsvClient,
+	_QueryLogTypeName[39:44]: QueryLogTypeRedis,
 }
 
 // ParseQueryLogType attempts to convert a string to a QueryLogType.

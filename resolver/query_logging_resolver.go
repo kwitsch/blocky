@@ -1,12 +1,14 @@
 package resolver
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/0xERR0R/blocky/config"
 	"github.com/0xERR0R/blocky/model"
 	"github.com/0xERR0R/blocky/querylog"
+	"github.com/0xERR0R/blocky/redis"
 	"github.com/avast/retry-go/v4"
 )
 
@@ -28,7 +30,7 @@ type QueryLoggingResolver struct {
 }
 
 // NewQueryLoggingResolver returns a new resolver instance
-func NewQueryLoggingResolver(cfg config.QueryLogConfig) ChainedResolver {
+func NewQueryLoggingResolver(cfg config.QueryLogConfig, redis *redis.Client) ChainedResolver {
 	var writer querylog.Writer
 
 	logType := cfg.Type
@@ -46,6 +48,12 @@ func NewQueryLoggingResolver(cfg config.QueryLogConfig) ChainedResolver {
 				writer, err = querylog.NewDatabaseWriter("postgresql", cfg.Target, cfg.LogRetentionDays, defaultFlushPeriod)
 			case config.QueryLogTypeConsole:
 				writer = querylog.NewLoggerWriter()
+			case config.QueryLogTypeRedis:
+				if redis != nil {
+					writer = querylog.NewRedisWriter(cfg, redis)
+				} else {
+					err = errors.New("redis is not configured")
+				}
 			case config.QueryLogTypeNone:
 				writer = querylog.NewNoneWriter()
 			}

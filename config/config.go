@@ -76,6 +76,7 @@ func (ipv IPVersion) QTypes() []dns.Type {
 // postgresql // PostgreSQL database
 // csv // CSV file per day
 // csv-client // CSV file per day and client
+// redis // Redis database
 // )
 type QueryLogType int16
 
