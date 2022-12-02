@@ -9,7 +9,6 @@ import (
 	"github.com/0xERR0R/blocky/config"
 	"github.com/0xERR0R/blocky/redis"
 	"github.com/0xERR0R/blocky/util"
-	"github.com/miekg/dns"
 	"golang.org/x/net/publicsuffix"
 )
 
@@ -41,20 +40,20 @@ func NewRedisWriter(cfg config.QueryLogConfig, redisClient *redis.Client) *Redis
 }
 
 func (d *RedisWriter) Write(entry *LogEntry) {
-	domain := util.ExtractDomain(entry.Request.Req.Question[0])
+	domain := util.ExtractDomainOnly(entry.QuestionName)
 	eTLD, _ := publicsuffix.EffectiveTLDPlusOne(domain)
 
 	e := &redisLogEntry{
-		ClientIP:      entry.Request.ClientIP.String(),
-		ClientName:    strings.Join(entry.Request.ClientNames, "; "),
+		ClientIP:      entry.ClientIP,
+		ClientName:    strings.Join(entry.ClientNames, "; "),
 		DurationMs:    entry.DurationMs,
-		Reason:        entry.Response.Reason,
-		ResponseType:  entry.Response.RType.String(),
-		QuestionType:  dns.TypeToString[entry.Request.Req.Question[0].Qtype],
+		Reason:        entry.ResponseReason,
+		ResponseType:  entry.ResponseType,
+		QuestionType:  entry.QuestionType,
 		QuestionName:  domain,
 		EffectiveTLDP: eTLD,
-		Answer:        util.AnswerToString(entry.Response.Res.Answer),
-		ResponseCode:  dns.RcodeToString[entry.Response.Res.Rcode],
+		Answer:        entry.Answer,
+		ResponseCode:  entry.ResponseCode,
 	}
 
 	if binmsg, err := json.Marshal(e); err == nil {
