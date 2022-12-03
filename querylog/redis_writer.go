@@ -20,17 +20,18 @@ import (
 const day time.Duration = time.Hour * 24
 
 type redisLogEntry struct {
-	Start         time.Time `json:"-"`
-	ClientIP      string
-	ClientName    string
+	Start         time.Time
+	ClientIP      string `json:",omitempty"`
+	ClientName    string `json:",omitempty"`
 	DurationMs    int64
-	Reason        string
-	ResponseType  string
-	QuestionType  string
-	QuestionName  string
-	EffectiveTLDP string
-	Answer        string
-	ResponseCode  string
+	Reason        string `json:",omitempty"`
+	ResponseType  string `json:",omitempty"`
+	QuestionType  string `json:",omitempty"`
+	QuestionName  string `json:",omitempty"`
+	EffectiveTLDP string `json:",omitempty"`
+	Answer        string `json:",omitempty"`
+	ResponseCode  string `json:",omitempty"`
+	Hostname      string `json:",omitempty"`
 }
 
 type RedisWriter struct {
@@ -66,6 +67,7 @@ func (d *RedisWriter) Write(entry *LogEntry) {
 	eTLD, _ := publicsuffix.EffectiveTLDPlusOne(domain)
 
 	e := &redisLogEntry{
+		Start:         entry.Start,
 		ClientIP:      entry.ClientIP,
 		ClientName:    strings.Join(entry.ClientNames, "; "),
 		DurationMs:    entry.DurationMs,
@@ -76,6 +78,7 @@ func (d *RedisWriter) Write(entry *LogEntry) {
 		EffectiveTLDP: eTLD,
 		Answer:        entry.Answer,
 		ResponseCode:  entry.ResponseCode,
+		Hostname:      util.HostnameString(),
 	}
 
 	d.lock.Lock()
@@ -89,11 +92,16 @@ func (d *RedisWriter) CleanUp() {
 }
 
 func (d *RedisWriter) getRetention() time.Duration {
-	return time.Duration(d.cfg.LogRetentionDays * uint64(day))
+	retention := d.cfg.LogRetentionDays
+	if retention == 0 {
+		retention = 1
+	}
+
+	return time.Duration(retention * uint64(day))
 }
 
 func (d *RedisWriter) getKeyName(entry *redisLogEntry) string {
-	return fmt.Sprintf("blocky:log:%s-%s", d.instanceName, entry.Start.Format(time.UnixDate))
+	return fmt.Sprintf("blocky:log:%s-%d", d.instanceName, uint64(entry.Start.Unix()))
 }
 
 func getInstanceName() string {
