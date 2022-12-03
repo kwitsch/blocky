@@ -97,7 +97,7 @@ func (d *RedisWriter) getRetention() time.Duration {
 }
 
 func (d *RedisWriter) getKeyName(entry *redisLogEntry) string {
-	return fmt.Sprintf("blocky:log:%s-%d", d.instanceName, entry.Start)
+	return fmt.Sprintf("blocky:log:%s-%s", d.instanceName, entry.Start.Format(time.UnixDate))
 }
 
 func getInstanceName() string {
@@ -114,8 +114,8 @@ func (d *RedisWriter) getRedisClient() *redis.Client {
 	db := d.redisCfg.Database
 
 	if len(d.cfg.Target) > 0 {
-		if newDb, err := strconv.Atoi(d.cfg.Target); err == nil {
-			db = newDb
+		if newDB, err := strconv.Atoi(d.cfg.Target); err == nil {
+			db = newDB
 		}
 	}
 
@@ -174,15 +174,20 @@ func (d *RedisWriter) doDBWrite() error {
 		threshold := 100
 
 		for i, v := range d.pendingEntries {
-			multierror.Append(err, d.addEntryToPipeline(pipeline, v))
+			err = multierror.Append(err, d.addEntryToPipeline(pipeline, v))
 
 			if i >= threshold {
-				pipeline.Exec(d.ctx)
+				if _, err2 := pipeline.Exec(d.ctx); err2 != nil {
+					err = multierror.Append(err, err2)
+				}
 
 				threshold += 100
 			}
 		}
-		pipeline.Exec(d.ctx)
+
+		if _, err2 := pipeline.Exec(d.ctx); err2 != nil {
+			err = multierror.Append(err, err2)
+		}
 
 		// clear the slice with pending entries
 		d.pendingEntries = nil
@@ -200,11 +205,7 @@ func (d *RedisWriter) addEntryToPipeline(pipeline redis.Pipeliner, entry *redisL
 		return err
 	}
 
-	statusCmd := pipeline.Set(d.ctx, d.getKeyName(entry), binmsg, d.getTTL())
+	statusCmd := pipeline.Set(d.ctx, d.getKeyName(entry), binmsg, d.getRetention())
 
 	return statusCmd.Err()
-}
-
-func (d *RedisWriter) getTTL() time.Duration {
-	return time.Duration(d.cfg.LogRetentionDays) * 24 * time.Hour
 }
