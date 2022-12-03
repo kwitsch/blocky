@@ -7,7 +7,7 @@ import (
 	"github.com/0xERR0R/blocky/config"
 	"github.com/0xERR0R/blocky/model"
 	"github.com/0xERR0R/blocky/querylog"
-	"github.com/0xERR0R/blocky/redis"
+	"github.com/0xERR0R/blocky/util"
 	"github.com/avast/retry-go/v4"
 	"github.com/miekg/dns"
 )
@@ -31,7 +31,7 @@ type QueryLoggingResolver struct {
 }
 
 // NewQueryLoggingResolver returns a new resolver instance
-func NewQueryLoggingResolver(cfg config.QueryLogConfig, redis *redis.Client) ChainedResolver {
+func NewQueryLoggingResolver(cfg config.QueryLogConfig, redisCfg *config.RedisConfig) ChainedResolver {
 	var writer querylog.Writer
 
 	logType := cfg.Type
@@ -50,11 +50,7 @@ func NewQueryLoggingResolver(cfg config.QueryLogConfig, redis *redis.Client) Cha
 			case config.QueryLogTypeConsole:
 				writer = querylog.NewLoggerWriter()
 			case config.QueryLogTypeRedis:
-				if redis != nil {
-					writer = querylog.NewRedisWriter(cfg, redis)
-				} else {
-					err = errors.New("redis is not configured")
-				}
+				writer, err = querylog.NewRedisWriter(cfg, redisCfg, defaultFlushPeriod)
 			case config.QueryLogTypeNone:
 				writer = querylog.NewNoneWriter()
 			}

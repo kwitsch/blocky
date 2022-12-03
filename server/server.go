@@ -414,7 +414,7 @@ func createQueryResolver(
 		resolver.NewFqdnOnlyResolver(*cfg),
 		clientNames,
 		resolver.NewEdeResolver(cfg.Ede),
-		resolver.NewQueryLoggingResolver(cfg.QueryLog, redisClient),
+		resolver.NewQueryLoggingResolver(cfg.QueryLog, &cfg.Redis),
 		resolver.NewMetricsResolver(cfg.Prometheus),
 		resolver.NewRewriterResolver(cfg.CustomDNS.RewriteConfig, resolver.NewCustomDNSResolver(cfg.CustomDNS)),
 		resolver.NewHostsFileResolver(cfg.HostsFile),
