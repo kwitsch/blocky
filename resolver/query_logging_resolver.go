@@ -50,7 +50,7 @@ func NewQueryLoggingResolver(cfg config.QueryLogConfig, redisCfg *config.RedisCo
 			case config.QueryLogTypeConsole:
 				writer = querylog.NewLoggerWriter()
 			case config.QueryLogTypeRedis:
-				writer, err = querylog.NewRedisWriter(cfg, redisCfg, defaultFlushPeriod)
+				writer = querylog.NewRedisWriter(cfg, redisCfg, defaultFlushPeriod)
 			case config.QueryLogTypeNone:
 				writer = querylog.NewNoneWriter()
 			}

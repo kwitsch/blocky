@@ -45,7 +45,7 @@ type RedisWriter struct {
 }
 
 func NewRedisWriter(cfg config.QueryLogConfig, redisCfg *config.RedisConfig,
-	dbFlushPeriod time.Duration) (*RedisWriter, error) {
+	dbFlushPeriod time.Duration) *RedisWriter {
 	rw := RedisWriter{
 		cfg:           &cfg,
 		redisCfg:      redisCfg,
@@ -56,13 +56,9 @@ func NewRedisWriter(cfg config.QueryLogConfig, redisCfg *config.RedisConfig,
 
 	rw.client = rw.getRedisClient()
 
-	_, err := rw.client.Ping(rw.ctx).Result()
+	go rw.periodicWrite()
 
-	if err == nil {
-		go rw.periodicWrite()
-	}
-
-	return &rw, err
+	return &rw
 }
 
 func (d *RedisWriter) Write(entry *LogEntry) {
