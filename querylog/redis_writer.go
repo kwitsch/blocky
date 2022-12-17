@@ -91,13 +91,16 @@ func (d *RedisWriter) CleanUp() {
 	// Nothing to do
 }
 
-func (d *RedisWriter) getRetention() time.Duration {
+func (d *RedisWriter) getRetention(entry *redisLogEntry) time.Duration {
 	retention := d.cfg.LogRetentionDays
 	if retention == 0 {
 		retention = 1
 	}
 
-	return time.Duration(retention * uint64(day))
+	entry.Start.Add()
+	start := entry.Start.Add(time.Duration(retention * (uint64(day))))
+
+	return entry.Start.Sub(d.)
 }
 
 func (d *RedisWriter) getKeyName(entry *redisLogEntry) string {
@@ -209,7 +212,7 @@ func (d *RedisWriter) addEntryToPipeline(pipeline redis.Pipeliner, entry *redisL
 		return err
 	}
 
-	statusCmd := pipeline.Set(d.ctx, d.getKeyName(entry), binmsg, d.getRetention())
+	statusCmd := pipeline.Set(d.ctx, d.getKeyName(entry), binmsg, d.getRetention(entry))
 
 	return statusCmd.Err()
 }

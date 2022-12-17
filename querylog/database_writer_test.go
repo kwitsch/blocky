@@ -17,9 +17,10 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 )
 
-var err error
 
 var _ = Describe("DatabaseWriter", func() {
+	
+	var err error
 
 	Describe("Database query log to sqlite", func() {
 		var (
