@@ -300,9 +300,6 @@ var _ = Describe("DatabaseWriter", func() {
 					Expect(err.Error()).Should(ContainSubstring("can't perform auto migration: error XXX: some db error"))
 				})
 			})
-
 		})
-
 	})
-
 })

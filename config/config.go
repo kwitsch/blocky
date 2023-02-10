@@ -125,8 +125,8 @@ func (s *QTypeSet) Insert(qType dns.Type) {
 
 type Duration time.Duration
 
-func (c *Duration) String() string {
-	return durafmt.Parse(time.Duration(*c)).String()
+func (c Duration) String() string {
+	return durafmt.Parse(time.Duration(c)).String()
 }
 
 //nolint:gochecknoglobals
@@ -151,7 +151,7 @@ func (u *Upstream) IsDefault() bool {
 }
 
 // String returns the string representation of u
-func (u *Upstream) String() string {
+func (u Upstream) String() string {
 	if u.IsDefault() {
 		return "no upstream"
 	}
@@ -218,20 +218,41 @@ func (l *ListenConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	return nil
 }
 
+// UnmarshalYAML creates BootstrapDNSConfig from YAML
+func (b *BootstrapDNSConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	var single BootstrappedUpstreamConfig
+	if err := unmarshal(&single); err == nil {
+		*b = BootstrapDNSConfig{single}
+
+		return nil
+	}
+
+	// bootstrapDNSConfig is used to avoid infinite recursion:
+	// if we used BootstrapDNSConfig, unmarshal would just call us again.
+	var c bootstrapDNSConfig
+	if err := unmarshal(&c); err != nil {
+		return err
+	}
+
+	*b = BootstrapDNSConfig(c)
+
+	return nil
+}
+
 // UnmarshalYAML creates BootstrapConfig from YAML
-func (b *BootstrapConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
+func (b *BootstrappedUpstreamConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	if err := unmarshal(&b.Upstream); err == nil {
 		return nil
 	}
 
 	// bootstrapConfig is used to avoid infinite recursion:
 	// if we used BootstrapConfig, unmarshal would just call us again.
-	var c bootstrapConfig
+	var c bootstrappedUpstreamConfig
 	if err := unmarshal(&c); err != nil {
 		return err
 	}
 
-	*b = BootstrapConfig(c)
+	*b = BootstrappedUpstreamConfig(c)
 
 	return nil
 }
@@ -378,7 +399,6 @@ func ParseUpstream(upstream string) (Upstream, error) {
 	// string contains host:port
 	if err == nil {
 		p, err := ConvertPort(portString)
-
 		if err != nil {
 			err = fmt.Errorf("can't convert port to number (1 - 65535) %w", err)
 
@@ -419,7 +439,7 @@ func extractCommonName(in string) (string, string) {
 	return cn, upstream
 }
 
-func extractPath(in string) (path string, upstream string) {
+func extractPath(in string) (path, upstream string) {
 	slashIdx := strings.Index(in, "/")
 
 	if slashIdx >= 0 {
@@ -473,7 +493,7 @@ type Config struct {
 	StartVerifyUpstream bool                      `yaml:"startVerifyUpstream" default:"false"`
 	CertFile            string                    `yaml:"certFile"`
 	KeyFile             string                    `yaml:"keyFile"`
-	BootstrapDNS        BootstrapConfig           `yaml:"bootstrapDns"`
+	BootstrapDNS        BootstrapDNSConfig        `yaml:"bootstrapDns"`
 	HostsFile           HostsFileConfig           `yaml:"hostsFile"`
 	FqdnOnly            bool                      `yaml:"fqdnOnly" default:"false"`
 	Filtering           FilteringConfig           `yaml:"filtering"`
@@ -505,11 +525,20 @@ type PortsConfig struct {
 	TLS   ListenConfig `yaml:"tls"`
 }
 
-type BootstrapConfig bootstrapConfig // to avoid infinite recursion. See BootstrapConfig.UnmarshalYAML.
-type bootstrapConfig struct {
-	Upstream Upstream `yaml:"upstream"`
-	IPs      []net.IP `yaml:"ips"`
-}
+// split in two types to avoid infinite recursion. See `BootstrapDNSConfig.UnmarshalYAML`.
+type (
+	BootstrapDNSConfig bootstrapDNSConfig
+	bootstrapDNSConfig []BootstrappedUpstreamConfig
+)
+
+// split in two types to avoid infinite recursion. See `BootstrappedUpstreamConfig.UnmarshalYAML`.
+type (
+	BootstrappedUpstreamConfig bootstrappedUpstreamConfig
+	bootstrappedUpstreamConfig struct {
+		Upstream Upstream `yaml:"upstream"`
+		IPs      []net.IP `yaml:"ips"`
+	}
+)
 
 // PrometheusConfig contains the config values for prometheus
 type PrometheusConfig struct {
@@ -586,6 +615,18 @@ type CachingConfig struct {
 	PrefetchExpires       Duration `yaml:"prefetchExpires" default:"2h"`
 	PrefetchThreshold     int      `yaml:"prefetchThreshold" default:"5"`
 	PrefetchMaxItemsCount int      `yaml:"prefetchMaxItemsCount"`
+}
+
+func (c *CachingConfig) EnablePrefetch() {
+	const day = 24 * time.Hour
+
+	if c.MaxCachingTime == 0 {
+		// make sure resolver gets enabled
+		c.MaxCachingTime = Duration(day)
+	}
+
+	c.Prefetching = true
+	c.PrefetchThreshold = 0
 }
 
 // QueryLogConfig configuration for the query logging
@@ -837,9 +878,7 @@ func ConvertPort(in string) (uint16, error) {
 		bitSize = 16
 	)
 
-	var p uint64
 	p, err := strconv.ParseUint(strings.TrimSpace(in), base, bitSize)
-
 	if err != nil {
 		return 0, err
 	}

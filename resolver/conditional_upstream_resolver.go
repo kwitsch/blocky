@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/0xERR0R/blocky/config"
+	"github.com/0xERR0R/blocky/log"
 	"github.com/0xERR0R/blocky/model"
 	"github.com/0xERR0R/blocky/util"
 
@@ -41,12 +42,12 @@ func NewConditionalUpstreamResolver(
 
 // Configuration returns current configuration
 func (r *ConditionalUpstreamResolver) Configuration() (result []string) {
-	if len(r.mapping) > 0 {
-		for key, val := range r.mapping {
-			result = append(result, fmt.Sprintf("%s = \"%s\"", key, val))
-		}
-	} else {
-		result = []string{"deactivated"}
+	if len(r.mapping) == 0 {
+		return configDisabled
+	}
+
+	for key, val := range r.mapping {
+		result = append(result, fmt.Sprintf("%s = \"%s\"", key, val))
 	}
 
 	return
@@ -82,7 +83,7 @@ func (r *ConditionalUpstreamResolver) processRequest(request *model.Request) (bo
 
 // Resolve uses the conditional resolver to resolve the query
 func (r *ConditionalUpstreamResolver) Resolve(request *model.Request) (*model.Response, error) {
-	logger := withPrefix(request.Log, "conditional_resolver")
+	logger := log.WithPrefix(request.Log, "conditional_resolver")
 
 	if len(r.mapping) > 0 {
 		resolved, resp, err := r.processRequest(request)
@@ -97,9 +98,10 @@ func (r *ConditionalUpstreamResolver) Resolve(request *model.Request) (*model.Re
 }
 
 func (r *ConditionalUpstreamResolver) internalResolve(reso Resolver, doFQ, do string,
-	req *model.Request) (*model.Response, error) {
+	req *model.Request,
+) (*model.Response, error) {
 	// internal request resolution
-	logger := withPrefix(req.Log, "conditional_resolver")
+	logger := log.WithPrefix(req.Log, "conditional_resolver")
 
 	req.Req.Question[0].Name = dns.Fqdn(doFQ)
 	response, err := reso.Resolve(req)

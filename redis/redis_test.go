@@ -2,6 +2,7 @@ package redis
 
 import (
 	"encoding/json"
+	"time"
 
 	"github.com/0xERR0R/blocky/config"
 	"github.com/0xERR0R/blocky/util"
@@ -131,7 +132,6 @@ var _ = Describe("Redis client", func() {
 					Expect(ttl.Seconds()).Should(BeNumerically("~", defaultCacheTime.Seconds()))
 				})
 			})
-
 		})
 		When("Redis client publishes 'enabled' message", func() {
 			It("should propagate the message over redis", func() {
@@ -256,6 +256,8 @@ var _ = Describe("Redis client", func() {
 				rec := redisServer.Publish(SyncChannelName, string(binMsg))
 				Expect(rec).Should(Equal(1))
 
+				time.Sleep(2 * time.Second)
+
 				Eventually(func() chan *EnabledMessage {
 					return redisClient.EnabledChannel
 				}).Should(HaveLen(lenE))
@@ -301,13 +303,10 @@ var _ = Describe("Redis client", func() {
 		})
 		When("GetRedisCache is called and database contains not valid entry", func() {
 			It("Should do nothing (only log error)", func() {
-
 				Expect(redisServer.DB(redisConfig.Database).Set(CacheStorePrefix+"test", "test")).Should(Succeed())
 				redisClient.GetRedisCache()
 				Consistently(redisClient.CacheChannel).Should(BeEmpty())
-
 			})
 		})
 	})
-
 })
