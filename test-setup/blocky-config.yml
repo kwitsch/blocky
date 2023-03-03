@@ -1,0 +1,20 @@
+ports:
+  dns: 53
+
+log:
+  level: info
+
+upstream:
+  default:
+    - 1.1.1.1
+
+blocking:
+  clientGroupsBlock:
+    default:
+      - ads
+  blackLists:
+    ads:
+      - |
+        twitter.com
+        facebook.com
+        instagram.com

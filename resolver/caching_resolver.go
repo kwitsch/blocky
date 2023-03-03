@@ -76,7 +76,7 @@ func configureCaches(c *CachingResolver, cfg *config.CachingConfig) {
 	}
 
 	c.resultCache = expirationcache.NewRedisCache(rr.NewClient(&rr.Options{
-		Addr:     "localhost:6379",
+		Addr:     "redis:6379",
 		Password: "", // no password set
 		DB:       0,  // use default DB
 	}), "query_cache")

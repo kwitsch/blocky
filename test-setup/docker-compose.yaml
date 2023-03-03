@@ -1,0 +1,60 @@
+version: "3.8"
+
+services:
+  redis:
+    image: redis
+    container_name: redis
+    ports:
+      - 6380:6379
+  blocky-dev:
+    image: ghcr.io/0xerr0r/blocky:development
+    container_name: blocky-dev
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ./blocky-config.yml:/app/config.yml:ro
+  blocky-redis:
+    build: ..
+    container_name: blocky-redis
+    ports:
+      - 53:53
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ./blocky-config.yml:/app/config.yml:ro
+  dnscacherefresh-dev:
+    image: kwitsch/dnscacherefresh:dev
+    environment:
+      - DCR.resolver=blocky-dev
+      - DCR.start=1m
+      - DCR.refresh=1m
+      - DCR.verbose=True
+      - DCR.domains[0]=github.com
+      - DCR.domains[1]=microsoft.com
+      - DCR.domains[2]=google.com
+      - DCR.domains[3]=amazon.com
+      - DCR.domains[4]=ebay.com
+      - DCR.domains[5]=twitter.com
+      - DCR.domains[6]=facebook.com
+      - DCR.domains[7]=instagram.com
+      - DCR.domains[8]=gitlab.com
+      - DCR.domains[9]=youtube.com
+      - DCR.domains[10]=git.com
+      - DCR.domains[11]=redis.io
+  dnscacherefresh-redis:
+    image: kwitsch/dnscacherefresh:dev
+    environment:
+      - DCR.resolver=blocky-redis
+      - DCR.start=1m
+      - DCR.refresh=1m
+      - DCR.verbose=True
+      - DCR.domains[0]=github.com
+      - DCR.domains[1]=microsoft.com
+      - DCR.domains[2]=google.com
+      - DCR.domains[3]=amazon.com
+      - DCR.domains[4]=ebay.com
+      - DCR.domains[5]=twitter.com
+      - DCR.domains[6]=facebook.com
+      - DCR.domains[7]=instagram.com
+      - DCR.domains[8]=gitlab.com
+      - DCR.domains[9]=youtube.com
+      - DCR.domains[10]=git.com
+      - DCR.domains[11]=redis.io
