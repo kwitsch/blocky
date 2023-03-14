@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/hako/durafmt"
-	"github.com/rueian/rueidis"
 
 	"github.com/0xERR0R/blocky/cache/expirationcache"
 	"github.com/0xERR0R/blocky/config"
@@ -74,12 +73,7 @@ func configureCaches(c *CachingResolver, cfg *config.CachingConfig) {
 		)
 	}
 
-	client, _ := rueidis.NewClient(rueidis.ClientOption{
-		InitAddress:           []string{"redis:6379"},
-		ClientTrackingOptions: []string{"PREFIX", "blocky:", "BCAST"},
-	})
-
-	c.resultCache = expirationcache.NewRedisCache(client, "blocky:cache:query")
+	c.resultCache = expirationcache.NewRedisCache(redis.GetRedisClient(), "query")
 }
 
 func setupRedisCacheSubscriber(c *CachingResolver) {

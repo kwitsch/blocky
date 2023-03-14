@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/0xERR0R/blocky/redis"
 	"github.com/miekg/dns"
 	"github.com/rueian/rueidis"
 )
@@ -24,14 +25,14 @@ func (r *RedisCache) Put(key string, val interface{}, expiration time.Duration) 
 			panic(err)
 		}
 		err = r.rdb.Do(r.ctx, r.rdb.B().Setex().
-			Key(r.name+":"+key).Seconds(int64(expiration.Seconds())).
+			Key(r.cacheKey(key)).Seconds(int64(expiration.Seconds())).
 			Value(rueidis.BinaryString(b)).Build()).Error()
 		if err != nil {
 			panic(err)
 		}
 	case int:
 		err := r.rdb.Do(r.ctx, r.rdb.B().Setex().
-			Key(r.name+":"+key).Seconds(int64(expiration.Seconds())).
+			Key(r.cacheKey(key)).Seconds(int64(expiration.Seconds())).
 			Value(fmt.Sprint(v)).Build()).Error()
 		if err != nil {
 			panic(err)
@@ -43,7 +44,7 @@ func (r *RedisCache) Put(key string, val interface{}, expiration time.Duration) 
 }
 
 func (r *RedisCache) Get(key string) (val interface{}, expiration time.Duration) {
-	resp := r.rdb.DoCache(r.ctx, r.rdb.B().Get().Key(r.name+":"+key).Cache(), time.Hour)
+	resp := r.rdb.DoCache(r.ctx, r.rdb.B().Get().Key(r.cacheKey(key)).Cache(), time.Hour)
 	rerr := resp.RedisError()
 	if rerr != nil && rerr.IsNil() {
 		return nil, 0
@@ -93,4 +94,8 @@ func NewRedisCache(rdb rueidis.Client, name string) *RedisCache {
 		rdb:  rdb,
 		name: name,
 	}
+}
+
+func (r *RedisCache) cacheKey(key string) string {
+	return redis.GetKey("cache", r.name, key)
 }
