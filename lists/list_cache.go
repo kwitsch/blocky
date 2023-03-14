@@ -147,7 +147,7 @@ func logger() *logrus.Entry {
 }
 
 func (b *ListCache) cacheKey(groupName string) string {
-	return fmt.Sprintf("cache_%s_%s", b.listType.String(), groupName)
+	return fmt.Sprintf("blocky:cache:%s:%s", b.listType.String(), groupName)
 
 }
 
