@@ -8,8 +8,9 @@ import (
 	"time"
 
 	"github.com/0xERR0R/blocky/log"
-	"github.com/go-redis/redis/v8"
+	"github.com/0xERR0R/blocky/redis"
 	"github.com/hako/durafmt"
+	"github.com/rueian/rueidis"
 )
 
 type StringCache interface {
@@ -23,17 +24,24 @@ type CacheFactory interface {
 }
 
 type redisStringCache struct {
-	rdb *redis.Client
+	rdb rueidis.Client
 	key string
 }
 
 func (cache *redisStringCache) ElementCount() int {
-	return int(cache.rdb.SCard(context.Background(), cache.key).Val())
+	res, err := cache.rdb.DoCache(context.Background(), cache.rdb.B().Scard().Key(cache.key).Cache(), time.Hour).ToInt64()
+	if err != nil {
+		panic(err)
+	}
+	return int(res)
 }
 
 func (cache *redisStringCache) Contains(searchString string) bool {
 	now := time.Now()
-	found := cache.rdb.SIsMember(context.Background(), cache.key, searchString).Val()
+	found, err := cache.rdb.DoCache(context.Background(), cache.rdb.B().Sismember().Key(cache.key).Member(searchString).Cache(), time.Hour).AsBool()
+	if err != nil {
+		panic(err)
+	}
 	log.Log().Infof("redis lookup in set '%s', domain '%s': result: %t, duration %s", cache.key, searchString, found, durafmt.Parse(time.Since(now)).String())
 
 	return found
@@ -76,32 +84,28 @@ func (cache stringCache) Contains(searchString string) bool {
 }
 
 type redisStringCacheFactory struct {
-	pipeline redis.Pipeliner
-	name     string
-	rdb      *redis.Client
+	rdb  rueidis.Client
+	name string
+	cmds rueidis.Commands
 }
 
-func newRedisStringCacheFactory(rdb *redis.Client, name string) CacheFactory {
-	pipeline := rdb.Pipeline()
-	pipeline.Del(context.Background(), name)
+func newRedisStringCacheFactory(rdb rueidis.Client, name string) CacheFactory {
+	cmds := rueidis.Commands{rdb.B().Del().Key(name).Build()}
 
 	return &redisStringCacheFactory{
-		rdb:      rdb,
-		pipeline: pipeline,
-		name:     name,
+		name: name,
+		rdb:  rdb,
+		cmds: cmds,
 	}
 }
 
 func (s *redisStringCacheFactory) AddEntry(entry string) {
-	err := s.pipeline.SAdd(context.Background(), s.name, entry).Err()
-	if err != nil {
-		panic(err)
-	}
+	s.cmds = append(s.cmds, s.rdb.B().Sadd().Key(s.name).Member(entry).Build())
+	s.rdb.B().Sadd().Key(s.name).Member(entry).Build()
 }
 
 func (s *redisStringCacheFactory) Create() StringCache {
-	// TODO batch
-	s.pipeline.Exec(context.Background())
+	s.rdb.DoMulti(context.Background(), s.cmds...)
 	return &redisStringCache{
 		rdb: s.rdb,
 		key: s.name,
@@ -250,11 +254,7 @@ func (r *chainedCacheFactory) Create() StringCache {
 
 func NewChainedCacheFactory(name string) CacheFactory {
 	return &chainedCacheFactory{
-		stringCacheFactory: newRedisStringCacheFactory(redis.NewClient(&redis.Options{
-			Addr:     "redis:6379",
-			Password: "", // no password set
-			DB:       0,  // use default DB
-		}), name),
-		regexCacheFactory: newRegexCacheFactory(),
+		stringCacheFactory: newRedisStringCacheFactory(redis.GetRedisClient(), name),
+		regexCacheFactory:  newRegexCacheFactory(),
 	}
 }

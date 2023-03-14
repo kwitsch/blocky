@@ -1,9 +1,6 @@
 package redis
 
 import (
-	"fmt"
-	"strings"
-
 	"github.com/rueian/rueidis"
 )
 
@@ -24,8 +21,10 @@ func GetRedisClient() rueidis.Client {
 	return rdb
 }
 
-func GetKey(k ...any) string {
-	base := fmt.Sprintf("blocky:%s", fmt.Sprint(k...))
-	trimmed := strings.TrimSpace(base)
-	return strings.ReplaceAll(trimmed, " ", ":")
+func GetKey(k ...string) string {
+	res := "blocky"
+	for _, s := range k {
+		res += ":" + s
+	}
+	return res
 }

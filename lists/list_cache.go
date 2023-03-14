@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/0xERR0R/blocky/cache/stringcache"
+	"github.com/0xERR0R/blocky/redis"
 	"github.com/sirupsen/logrus"
 
 	"github.com/hako/durafmt"
@@ -147,7 +148,7 @@ func logger() *logrus.Entry {
 }
 
 func (b *ListCache) cacheKey(groupName string) string {
-	return fmt.Sprintf("blocky:cache:%s:%s", b.listType.String(), groupName)
+	return redis.GetKey("cache", b.listType.String(), groupName)
 
 }
 
