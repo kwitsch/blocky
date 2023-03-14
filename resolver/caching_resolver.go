@@ -75,7 +75,8 @@ func configureCaches(c *CachingResolver, cfg *config.CachingConfig) {
 	}
 
 	client, _ := rueidis.NewClient(rueidis.ClientOption{
-		InitAddress: []string{"redis:6379"},
+		InitAddress:           []string{"redis:6379"},
+		ClientTrackingOptions: []string{"PREFIX", "query_cache:", "BCAST"},
 	})
 
 	c.resultCache = expirationcache.NewRedisCache(client, "query_cache")

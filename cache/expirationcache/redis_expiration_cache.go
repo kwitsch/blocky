@@ -44,8 +44,13 @@ func (r *RedisCache) Put(key string, val interface{}, expiration time.Duration) 
 
 func (r *RedisCache) Get(key string) (val interface{}, expiration time.Duration) {
 	resp := r.rdb.DoCache(r.ctx, r.rdb.B().Get().Key(r.name+":"+key).Cache(), time.Hour)
-	if resp.Error() != nil {
-		panic(resp.Error())
+	rerr := resp.RedisError()
+	if rerr != nil && rerr.IsNil() {
+		return nil, 0
+	}
+	err := resp.Error()
+	if err != nil {
+		panic(err)
 	}
 
 	respStr, err := resp.ToString()
