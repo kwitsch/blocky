@@ -3,14 +3,16 @@ package expirationcache
 import (
 	"context"
 	"fmt"
-	"github.com/go-redis/redis/v8"
-	"github.com/miekg/dns"
 	"strconv"
 	"time"
+
+	"github.com/miekg/dns"
+	"github.com/rueian/rueidis"
 )
 
 type RedisCache struct {
-	rdb  *redis.Client
+	ctx  context.Context
+	rdb  rueidis.Client
 	name string
 }
 
@@ -21,12 +23,16 @@ func (r *RedisCache) Put(key string, val interface{}, expiration time.Duration) 
 		if err != nil {
 			panic(err)
 		}
-		err = r.rdb.Set(context.Background(), r.name+":"+key, b, expiration).Err()
+		err = r.rdb.Do(r.ctx, r.rdb.B().Setex().
+			Key(r.name+":"+key).Seconds(int64(expiration.Seconds())).
+			Value(rueidis.BinaryString(b)).Build()).Error()
 		if err != nil {
 			panic(err)
 		}
 	case int:
-		err := r.rdb.Set(context.Background(), r.name+":"+key, v, expiration).Err()
+		err := r.rdb.Do(r.ctx, r.rdb.B().Setex().
+			Key(r.name+":"+key).Seconds(int64(expiration.Seconds())).
+			Value(fmt.Sprint(v)).Build()).Error()
 		if err != nil {
 			panic(err)
 		}
@@ -37,22 +43,23 @@ func (r *RedisCache) Put(key string, val interface{}, expiration time.Duration) 
 }
 
 func (r *RedisCache) Get(key string) (val interface{}, expiration time.Duration) {
-	bytesVal, err := r.rdb.Get(context.Background(), r.name+":"+key).Bytes()
-	if err == redis.Nil {
-		return nil, 0
+	resp := r.rdb.DoCache(r.ctx, r.rdb.B().Get().Key(r.name+":"+key).Cache(), time.Hour)
+	if resp.Error() != nil {
+		panic(resp.Error())
 	}
+
+	respStr, err := resp.ToString()
 	if err != nil {
 		panic(err)
 	}
-
-	exp := r.rdb.TTL(context.Background(), r.name+":"+key).Val()
+	bytesVal := []byte(respStr)
 
 	if len(bytesVal) <= 2 {
 		code, err := strconv.Atoi(string(bytesVal))
 		if err != nil {
 			panic(err)
 		}
-		return code, exp
+		return code, time.Duration(resp.CacheTTL() * int64(time.Second))
 	}
 
 	msg := new(dns.Msg)
@@ -61,7 +68,7 @@ func (r *RedisCache) Get(key string) (val interface{}, expiration time.Duration)
 		panic(err)
 	}
 
-	return msg, exp
+	return msg, time.Duration(resp.CacheTTL() * int64(time.Second))
 }
 
 func (r *RedisCache) TotalCount() int {
@@ -74,9 +81,10 @@ func (r *RedisCache) Clear() {
 
 }
 
-func NewRedisCache(rdb *redis.Client, name string) *RedisCache {
+func NewRedisCache(rdb rueidis.Client, name string) *RedisCache {
 
 	return &RedisCache{
+		ctx:  context.Background(),
 		rdb:  rdb,
 		name: name,
 	}

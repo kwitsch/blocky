@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/hako/durafmt"
+	"github.com/rueian/rueidis"
 
 	"github.com/0xERR0R/blocky/cache/expirationcache"
 	"github.com/0xERR0R/blocky/config"
@@ -14,8 +15,6 @@ import (
 	"github.com/0xERR0R/blocky/model"
 	"github.com/0xERR0R/blocky/redis"
 	"github.com/0xERR0R/blocky/util"
-
-	rr "github.com/go-redis/redis/v8"
 
 	"github.com/miekg/dns"
 	"github.com/sirupsen/logrus"
@@ -75,11 +74,11 @@ func configureCaches(c *CachingResolver, cfg *config.CachingConfig) {
 		)
 	}
 
-	c.resultCache = expirationcache.NewRedisCache(rr.NewClient(&rr.Options{
-		Addr:     "localhost:6379",
-		Password: "", // no password set
-		DB:       0,  // use default DB
-	}), "query_cache")
+	client, _ := rueidis.NewClient(rueidis.ClientOption{
+		InitAddress: []string{"redis:6379"},
+	})
+
+	c.resultCache = expirationcache.NewRedisCache(client, "query_cache")
 }
 
 func setupRedisCacheSubscriber(c *CachingResolver) {
