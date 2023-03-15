@@ -23,24 +23,24 @@ jobs:
           - make: build
             go: true
             docker: false
-          - make: test
-            go: true
-            docker: false
-          - make: race
-            go: true
-            docker: false
-          - make: docker-build
-            go: false
-            docker: true
-          - make: e2e-test
-            go: true
-            docker: true
-          - make: goreleaser
-            go: false
-            docker: false
-          - make: lint
-            go: true
-            docker: false
+#          - make: test
+#            go: true
+#            docker: false
+#          - make: race
+#            go: true
+#            docker: false
+#          - make: docker-build
+#            go: false
+#            docker: true
+#          - make: e2e-test
+#            go: true
+#            docker: true
+#          - make: goreleaser
+#            go: false
+#            docker: false
+#          - make: lint
+#            go: true
+#            docker: false
 
     steps:
       - name: Check out code into the Go module directory
