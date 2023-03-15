@@ -23,7 +23,7 @@ services:
     environment:
       - DCR.resolver=blocky-dev
       - DCR.start=1m
-      - DCR.refresh=1m
+      - DCR.refresh=10s
       - DCR.verbose=True
       - DCR.domains[0]=github.com
       - DCR.domains[1]=microsoft.com
@@ -42,7 +42,7 @@ services:
     environment:
       - DCR.resolver=blocky-redis
       - DCR.start=1m
-      - DCR.refresh=1m
+      - DCR.refresh=10s
       - DCR.verbose=True
       - DCR.domains[0]=github.com
       - DCR.domains[1]=microsoft.com

@@ -4,11 +4,9 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/0xERR0R/blocky/log"
 	"github.com/0xERR0R/blocky/redis"
-	"github.com/hako/durafmt"
 	"github.com/rueian/rueidis"
 )
 
@@ -36,12 +34,10 @@ func (cache *redisStringCache) ElementCount() int {
 }
 
 func (cache *redisStringCache) Contains(searchString string) bool {
-	now := time.Now()
 	found, err := cache.rdb.Sismember(cache.key, searchString)
 	if err != nil {
 		panic(err)
 	}
-	log.Log().Infof("redis lookup in set '%s', domain '%s': result: %t, duration %s", cache.key, searchString, found, durafmt.Parse(time.Since(now)).String())
 
 	return found
 }

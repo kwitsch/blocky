@@ -7,8 +7,10 @@ import (
 	"time"
 
 	"github.com/0xERR0R/blocky/config"
+	"github.com/0xERR0R/blocky/log"
 	"github.com/0xERR0R/blocky/util"
 	"github.com/google/uuid"
+	"github.com/hako/durafmt"
 	"github.com/rueian/rueidis"
 	"github.com/sirupsen/logrus"
 )
@@ -16,7 +18,12 @@ import (
 var c2 *Client2
 
 func init() {
-	ic2, err := New2(&config.RedisConfig{Addresses: []string{"redis:6379"}})
+	ic2, err := New2(&config.RedisConfig{
+		Addresses:            []string{"redis:6379"},
+		ClientMaxCachingTime: config.Duration(time.Hour),
+		ConnectionAttempts:   3,
+		ConnectionCooldown:   config.Duration(time.Second * 3),
+	})
 	if err != nil {
 		panic(err)
 	}
@@ -30,7 +37,7 @@ func GetRedisClient() *Client2 {
 type Client2 struct {
 	client       rueidis.Client
 	maxCacheTime time.Duration
-	l            *logrus.Entry
+	log          *logrus.Entry
 	ctx          context.Context
 	id           []byte
 }
@@ -64,7 +71,14 @@ func New2(cfg *config.RedisConfig) (*Client2, error) {
 		}
 	}
 
-	client, err := rueidis.NewClient(roption)
+	var client rueidis.Client
+	for i := 0; i < cfg.ConnectionAttempts; i++ {
+		client, err = rueidis.NewClient(roption)
+		if err == nil {
+			break
+		}
+		time.Sleep(time.Duration(cfg.ConnectionCooldown))
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -73,6 +87,7 @@ func New2(cfg *config.RedisConfig) (*Client2, error) {
 		client:       client,
 		maxCacheTime: time.Duration(cfg.ClientMaxCachingTime),
 		id:           id,
+		log:          log.PrefixedLog("redis"),
 		ctx:          context.Background(),
 	}
 
@@ -80,8 +95,11 @@ func New2(cfg *config.RedisConfig) (*Client2, error) {
 }
 
 func (c *Client2) Get(key string) rueidis.RedisResult {
+	now := time.Now()
 	cmd := c.client.B().Get().Key(key).Cache()
-	return c.client.DoCache(c.ctx, cmd, c.maxCacheTime)
+	res := c.client.DoCache(c.ctx, cmd, c.maxCacheTime)
+	c.log.Debugf("get: '%s' duration: %s", key, timeSince(now))
+	return res
 }
 
 func (c *Client2) SetA(key string, value any, expiration time.Duration) rueidis.RedisResult {
@@ -93,7 +111,7 @@ func (c *Client2) SetB(key string, value []byte, expiration time.Duration) rueid
 }
 
 func (c *Client2) SetS(key, value string, expiration time.Duration) rueidis.RedisResult {
-	cmds := make(rueidis.Commands, 0, 1)
+	cmds := make(rueidis.Commands, 1)
 	if expiration > 0 {
 		cmds[0] = c.client.B().Setex().Key(key).Seconds(toSeconds(expiration)).Value(value).Build()
 	} else {
@@ -111,7 +129,10 @@ func (c *Client2) Scard(key string) (int, error) {
 }
 
 func (c *Client2) Sismember(key, member string) (bool, error) {
-	return c.client.DoCache(c.ctx, c.client.B().Sismember().Key(key).Member(member).Cache(), c.maxCacheTime).AsBool()
+	now := time.Now()
+	res, err := c.client.DoCache(c.ctx, c.client.B().Sismember().Key(key).Member(member).Cache(), c.maxCacheTime).AsBool()
+	c.log.Debugf("lookup in set '%s', member '%s': result: %t, duration %s", key, member, res, timeSince(now))
+	return res, err
 }
 
 func (c *Client2) C() rueidis.Client {
@@ -137,4 +158,8 @@ func NoResult(res rueidis.RedisResult) bool {
 
 func toSeconds(t time.Duration) int64 {
 	return int64(t.Seconds())
+}
+
+func timeSince(start time.Time) string {
+	return durafmt.Parse(time.Since(start)).String()
 }

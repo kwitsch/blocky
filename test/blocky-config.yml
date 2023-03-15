@@ -2,7 +2,7 @@ ports:
   dns: 53
 
 log:
-  level: info
+  level: debug
 
 upstream:
   default:
@@ -11,11 +11,26 @@ upstream:
 blocking:
   clientGroupsBlock:
     default:
-      - ads
+      - adaway
+      - hagezi
+      - yoyo
+      - custom
   blackLists:
-    ads:
+    adaway:
+      - https://adaway.org/hosts.txt
+    hagezi:
       - https://raw.githubusercontent.com/hagezi/dns-blocklists/main/hosts/ultimate.txt
+    yoyo:
+      - https://pgl.yoyo.org/adservers/serverlist.php?hostformat=hosts&showintro=0&mimetype=plaintext
+    custom:
       - |
         twitter.com
         facebook.com
         instagram.com
+
+caching:
+  minTime: 2s
+  maxTime: 30m
+  prefetching: true
+  prefetchExpires: 2h
+  prefetchThreshold: 5

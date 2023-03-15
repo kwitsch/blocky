@@ -648,14 +648,12 @@ type RedisConfig struct {
 	SentinelPassword     string   `yaml:"sentinelPassword" default:""`
 	SentinelMasterSet    string   `yaml:"sentinelMasterSet" default:""`
 	ClientMaxCachingTime Duration `yaml:"clientMaxCachingTime" default:"1h"`
+	ConnectionAttempts   int      `yaml:"connectionAttempts" default:"3"`
+	ConnectionCooldown   Duration `yaml:"connectionCooldown" default:"1s"`
 	// Deprecated
 	Address string `yaml:"address"`
 	// Deprecated
 	Required bool `yaml:"required" default:"false"`
-	// Deprecated
-	ConnectionAttempts int `yaml:"connectionAttempts" default:"3"`
-	// Deprecated
-	ConnectionCooldown Duration `yaml:"connectionCooldown" default:"1s"`
 	// Deprecated
 	SentinelAddresses []string `yaml:"sentinelAddresses"`
 }
