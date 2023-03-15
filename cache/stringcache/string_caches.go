@@ -1,7 +1,6 @@
 package stringcache
 
 import (
-	"context"
 	"regexp"
 	"sort"
 	"strings"
@@ -24,12 +23,12 @@ type CacheFactory interface {
 }
 
 type redisStringCache struct {
-	rdb rueidis.Client
+	rdb *redis.Client2
 	key string
 }
 
 func (cache *redisStringCache) ElementCount() int {
-	res, err := cache.rdb.DoCache(context.Background(), cache.rdb.B().Scard().Key(cache.key).Cache(), time.Hour).ToInt64()
+	res, err := cache.rdb.Scard(cache.key)
 	if err != nil {
 		panic(err)
 	}
@@ -38,7 +37,7 @@ func (cache *redisStringCache) ElementCount() int {
 
 func (cache *redisStringCache) Contains(searchString string) bool {
 	now := time.Now()
-	found, err := cache.rdb.DoCache(context.Background(), cache.rdb.B().Sismember().Key(cache.key).Member(searchString).Cache(), time.Hour).AsBool()
+	found, err := cache.rdb.Sismember(cache.key, searchString)
 	if err != nil {
 		panic(err)
 	}
@@ -84,13 +83,13 @@ func (cache stringCache) Contains(searchString string) bool {
 }
 
 type redisStringCacheFactory struct {
-	rdb  rueidis.Client
+	rdb  *redis.Client2
 	name string
 	cmds rueidis.Commands
 }
 
-func newRedisStringCacheFactory(rdb rueidis.Client, name string) CacheFactory {
-	cmds := rueidis.Commands{rdb.B().Del().Key(name).Build()}
+func newRedisStringCacheFactory(rdb *redis.Client2, name string) CacheFactory {
+	cmds := rueidis.Commands{rdb.C().B().Del().Key(name).Build()}
 
 	return &redisStringCacheFactory{
 		name: name,
@@ -100,12 +99,11 @@ func newRedisStringCacheFactory(rdb rueidis.Client, name string) CacheFactory {
 }
 
 func (s *redisStringCacheFactory) AddEntry(entry string) {
-	s.cmds = append(s.cmds, s.rdb.B().Sadd().Key(s.name).Member(entry).Build())
-	s.rdb.B().Sadd().Key(s.name).Member(entry).Build()
+	s.cmds = append(s.cmds, s.rdb.C().B().Sadd().Key(s.name).Member(entry).Build())
 }
 
 func (s *redisStringCacheFactory) Create() StringCache {
-	s.rdb.DoMulti(context.Background(), s.cmds...)
+	s.rdb.DoMulti(s.cmds)
 	return &redisStringCache{
 		rdb: s.rdb,
 		key: s.name,

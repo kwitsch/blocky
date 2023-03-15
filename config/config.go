@@ -640,16 +640,24 @@ type QueryLogConfig struct {
 
 // RedisConfig configuration for the redis connection
 type RedisConfig struct {
-	Address            string   `yaml:"address"`
-	Username           string   `yaml:"username" default:""`
-	Password           string   `yaml:"password" default:""`
-	Database           int      `yaml:"database" default:"0"`
-	Required           bool     `yaml:"required" default:"false"`
-	ConnectionAttempts int      `yaml:"connectionAttempts" default:"3"`
+	Addresses            []string `yaml:"addresses"`
+	Username             string   `yaml:"username" default:""`
+	Password             string   `yaml:"password" default:""`
+	Database             int      `yaml:"database" default:"0"`
+	SentinelUsername     string   `yaml:"sentinelUsername" default:""`
+	SentinelPassword     string   `yaml:"sentinelPassword" default:""`
+	SentinelMasterSet    string   `yaml:"sentinelMasterSet" default:""`
+	ClientMaxCachingTime Duration `yaml:"clientMaxCachingTime" default:"1h"`
+	// Deprecated
+	Address string `yaml:"address"`
+	// Deprecated
+	Required bool `yaml:"required" default:"false"`
+	// Deprecated
+	ConnectionAttempts int `yaml:"connectionAttempts" default:"3"`
+	// Deprecated
 	ConnectionCooldown Duration `yaml:"connectionCooldown" default:"1s"`
-	SentinelUsername   string   `yaml:"sentinelUsername" default:""`
-	SentinelPassword   string   `yaml:"sentinelPassword" default:""`
-	SentinelAddresses  []string `yaml:"sentinelAddresses"`
+	// Deprecated
+	SentinelAddresses []string `yaml:"sentinelAddresses"`
 }
 
 type HostsFileConfig struct {

@@ -148,7 +148,7 @@ func logger() *logrus.Entry {
 }
 
 func (b *ListCache) cacheKey(groupName string) string {
-	return redis.GetKey("cache", b.listType.String(), groupName)
+	return redis.Key("cache", b.listType.String(), groupName)
 
 }
 

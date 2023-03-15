@@ -1,19 +1,16 @@
 package expirationcache
 
 import (
-	"context"
 	"fmt"
 	"strconv"
 	"time"
 
 	"github.com/0xERR0R/blocky/redis"
 	"github.com/miekg/dns"
-	"github.com/rueian/rueidis"
 )
 
 type RedisCache struct {
-	ctx  context.Context
-	rdb  rueidis.Client
+	rdb  *redis.Client2
 	name string
 }
 
@@ -24,16 +21,12 @@ func (r *RedisCache) Put(key string, val interface{}, expiration time.Duration) 
 		if err != nil {
 			panic(err)
 		}
-		err = r.rdb.Do(r.ctx, r.rdb.B().Setex().
-			Key(r.cacheKey(key)).Seconds(int64(expiration.Seconds())).
-			Value(rueidis.BinaryString(b)).Build()).Error()
+		err = r.rdb.SetB(r.cacheKey(key), b, expiration).Error()
 		if err != nil {
 			panic(err)
 		}
 	case int:
-		err := r.rdb.Do(r.ctx, r.rdb.B().Setex().
-			Key(r.cacheKey(key)).Seconds(int64(expiration.Seconds())).
-			Value(fmt.Sprint(v)).Build()).Error()
+		err := r.rdb.SetA(r.cacheKey(key), v, expiration).Error()
 		if err != nil {
 			panic(err)
 		}
@@ -44,9 +37,8 @@ func (r *RedisCache) Put(key string, val interface{}, expiration time.Duration) 
 }
 
 func (r *RedisCache) Get(key string) (val interface{}, expiration time.Duration) {
-	resp := r.rdb.DoCache(r.ctx, r.rdb.B().Get().Key(r.cacheKey(key)).Cache(), time.Hour)
-	rerr := resp.RedisError()
-	if rerr != nil && rerr.IsNil() {
+	resp := r.rdb.Get(r.cacheKey(key))
+	if redis.NoResult(resp) {
 		return nil, 0
 	}
 	err := resp.Error()
@@ -87,15 +79,14 @@ func (r *RedisCache) Clear() {
 
 }
 
-func NewRedisCache(rdb rueidis.Client, name string) *RedisCache {
+func NewRedisCache(rdb *redis.Client2, name string) *RedisCache {
 
 	return &RedisCache{
-		ctx:  context.Background(),
 		rdb:  rdb,
 		name: name,
 	}
 }
 
 func (r *RedisCache) cacheKey(key string) string {
-	return redis.GetKey("cache", r.name, key)
+	return redis.Key("cache", r.name, key)
 }

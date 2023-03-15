@@ -14,6 +14,7 @@ blocking:
       - ads
   blackLists:
     ads:
+      - https://raw.githubusercontent.com/hagezi/dns-blocklists/main/hosts/ultimate.txt
       - |
         twitter.com
         facebook.com
