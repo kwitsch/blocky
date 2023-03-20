@@ -1,6 +1,11 @@
 version: "3.8"
 
 services:
+  redis:
+    image: redis
+    container_name: redis
+    ports:
+      - 6380:6379
   blocky-redis:
     build: ..
     container_name: blocky-redis

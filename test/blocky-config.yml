@@ -15,8 +15,8 @@ blocking:
       - hagezi
       - yoyo
       - custom
-#      - ads
-#      - special
+      - ads
+      - special
   blackLists:
     adaway:
       - https://adaway.org/hosts.txt
@@ -46,4 +46,5 @@ caching:
 
 redis:
   addresses: 
-    - 192.168.100.100:6379
+#    - 192.168.100.100:6379
+    - redis:6379
