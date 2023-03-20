@@ -99,7 +99,7 @@ func NewListCache(t ListCacheType, groupToLinks map[string][]string, refreshPeri
 	}
 
 	var initError error
-	if async {
+	if async || rdb != nil {
 		initError = nil
 
 		// start list refresh in the background
