@@ -1,12 +1,20 @@
 package redis
 
 import (
+	"context"
 	"fmt"
 	"time"
+
+	_ "embed"
 
 	"github.com/0xERR0R/blocky/config"
 	"github.com/0xERR0R/blocky/util"
 	"github.com/rueian/rueidis"
+)
+
+var (
+	//go:embed blocky_functions.lua
+	luaLib string
 )
 
 // New creates a new redis client
@@ -46,5 +54,9 @@ func NewRedisClient(cfg *config.RedisConfig) (rueidis.Client, error) {
 		return nil, err
 	}
 
+	lres := client.Do(context.Background(), client.B().FunctionLoad().Replace().FunctionCode(luaLib).Build())
+	if lres.Error() != nil {
+		return nil, lres.Error()
+	}
 	return client, nil
 }

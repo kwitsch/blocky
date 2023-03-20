@@ -3,7 +3,6 @@ package stringcache
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/0xERR0R/blocky/log"
@@ -37,21 +36,15 @@ func (r *RedisGroupedStringCache) ElementCount(group string) int {
 
 func (r *RedisGroupedStringCache) Contains(searchString string, groups []string) []string {
 	start := time.Now()
-	keys := []string{}
-	for _, group := range groups {
-		keys = append(keys, r.cacheKey(group))
-	}
-	union := r.cacheKey(strings.Join(groups, ":"))
-
-	r.rdb.Do(context.Background(), r.rdb.B().Sunionstore().Destination(union).Key(keys...).Build())
-	r.rdb.B().Setex().Key(union).Seconds(60)
-	var cmds []rueidis.CacheableTTL
-	for _, key := range keys {
-		cmds = append(cmds, rueidis.CT(r.rdb.B().Sismember().Key(key).Member(searchString).Cache(), time.Minute))
-	}
-	resps := r.rdb.DoMultiCache(context.Background(), cmds...)
 
 	var result []string
+
+	/* slowest
+	var cmds []rueidis.CacheableTTL
+	for _, group := range groups {
+		cmds = append(cmds, rueidis.CT(r.rdb.B().Sismember().Key(r.cacheKey(group)).Member(searchString).Cache(), time.Second))
+	}
+	resps := r.rdb.DoMultiCache(context.Background(), cmds...)
 
 	for ix, group := range groups {
 		r, err := resps[ix].AsBool()
@@ -62,6 +55,28 @@ func (r *RedisGroupedStringCache) Contains(searchString string, groups []string)
 			result = append(result, group)
 		}
 	}
+	*/
+
+	/*        faster
+	for _, group := range groups {
+		r, err := r.rdb.DoCache(context.Background(), r.rdb.B().Sismember().Key(r.cacheKey(group)).Member(searchString).Cache(), time.Minute).AsBool()
+		if err != nil {
+			panic(err)
+		}
+		if r {
+			result = append(result, group)
+			//break
+		}
+	}*/
+
+	/* fastest */
+	var keys []string
+	for _, group := range groups {
+		keys = append(keys, r.cacheKey(group))
+	}
+
+	r.rdb.B().Fcall().Function("blocky_ismember").Numkeys(int64(len(keys))).Key(keys...).Arg(searchString).Build()
+
 	log.PrefixedLog("redis").Debugf("lookup for '%s': in groups: %v result: %v, duration %s", searchString, groups, result, durafmt.Parse(time.Since(start)).String())
 	return result
 }
