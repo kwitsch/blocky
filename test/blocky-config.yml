@@ -1,0 +1,49 @@
+ports:
+  dns: 53
+
+log:
+  level: debug
+
+upstream:
+  default:
+    - 1.1.1.1
+
+blocking:
+  clientGroupsBlock:
+    default:
+      - adaway
+      - hagezi
+      - yoyo
+      - custom
+#      - ads
+#      - special
+  blackLists:
+    adaway:
+      - https://adaway.org/hosts.txt
+    hagezi:
+      - https://raw.githubusercontent.com/hagezi/dns-blocklists/main/hosts/ultimate.txt
+    yoyo:
+      - https://pgl.yoyo.org/adservers/serverlist.php?hostformat=hosts&showintro=0&mimetype=plaintext
+    custom:
+      - |
+        twitter.com
+        facebook.com
+        instagram.com
+    ads:
+      - https://s3.amazonaws.com/lists.disconnect.me/simple_ad.txt
+      - https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts
+      - http://sysctl.org/cameleon/hosts
+      - https://s3.amazonaws.com/lists.disconnect.me/simple_tracking.txt
+    special:
+      - https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/fakenews/hosts
+
+caching:
+  minTime: 2s
+  maxTime: 30m
+  prefetching: true
+  prefetchExpires: 2h
+  prefetchThreshold: 5
+
+redis:
+  addresses: 
+    - 192.168.100.100:6379

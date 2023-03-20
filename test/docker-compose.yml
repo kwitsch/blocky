@@ -1,0 +1,28 @@
+version: "3.8"
+
+services:
+  blocky-redis:
+    build: ..
+    container_name: blocky-redis
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ./blocky-config.yml:/app/config.yml:ro
+  dnscacherefresh-redis:
+    image: kwitsch/dnscacherefresh:dev
+    environment:
+      - DCR.resolver=blocky-redis
+      - DCR.start=1m
+      - DCR.refresh=10s
+      - DCR.verbose=True
+      - DCR.domains[0]=github.com
+      - DCR.domains[1]=microsoft.com
+      - DCR.domains[2]=google.com
+      - DCR.domains[3]=amazon.com
+      - DCR.domains[4]=ebay.com
+      - DCR.domains[5]=twitter.com
+      - DCR.domains[6]=facebook.com
+      - DCR.domains[7]=instagram.com
+      - DCR.domains[8]=gitlab.com
+      - DCR.domains[9]=youtube.com
+      - DCR.domains[10]=git.com
+      - DCR.domains[11]=redis.io
