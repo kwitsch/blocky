@@ -3,25 +3,28 @@ package stringcache
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
+	"github.com/0xERR0R/blocky/log"
+	"github.com/hako/durafmt"
 	"github.com/rueian/rueidis"
 )
 
 type RedisGroupedStringCache struct {
-	rdb  rueidis.Client
-	name string
+	rdb       rueidis.Client
+	groupType string
 }
 
-func NewRedisGroupedStringCache(name string, rdb rueidis.Client) *RedisGroupedStringCache {
+func NewRedisGroupedStringCache(groupType string, rdb rueidis.Client) *RedisGroupedStringCache {
 	return &RedisGroupedStringCache{
-		name: name,
-		rdb:  rdb,
+		groupType: groupType,
+		rdb:       rdb,
 	}
 }
 
 func (r *RedisGroupedStringCache) cacheKey(groupName string) string {
-	return fmt.Sprintf("cache_%s_%s", r.name, groupName)
+	return fmt.Sprintf("blocky:cache:%s:%s", r.groupType, groupName)
 }
 
 func (r *RedisGroupedStringCache) ElementCount(group string) int {
@@ -33,9 +36,18 @@ func (r *RedisGroupedStringCache) ElementCount(group string) int {
 }
 
 func (r *RedisGroupedStringCache) Contains(searchString string, groups []string) []string {
-	var cmds []rueidis.CacheableTTL
+	start := time.Now()
+	keys := []string{}
 	for _, group := range groups {
-		cmds = append(cmds, rueidis.CT(r.rdb.B().Sismember().Key(r.cacheKey(group)).Member(searchString).Cache(), time.Second))
+		keys = append(keys, r.cacheKey(group))
+	}
+	union := r.cacheKey(strings.Join(groups, ":"))
+
+	r.rdb.Do(context.Background(), r.rdb.B().Sunionstore().Destination(union).Key(keys...).Build())
+	r.rdb.B().Setex().Key(union).Seconds(60)
+	var cmds []rueidis.CacheableTTL
+	for _, key := range keys {
+		cmds = append(cmds, rueidis.CT(r.rdb.B().Sismember().Key(key).Member(searchString).Cache(), time.Minute))
 	}
 	resps := r.rdb.DoMultiCache(context.Background(), cmds...)
 
@@ -50,7 +62,7 @@ func (r *RedisGroupedStringCache) Contains(searchString string, groups []string)
 			result = append(result, group)
 		}
 	}
-
+	log.PrefixedLog("redis").Debugf("lookup for '%s': in groups: %v result: %v, duration %s", searchString, groups, result, durafmt.Parse(time.Since(start)).String())
 	return result
 }
 
