@@ -84,7 +84,7 @@ func (r *RedisGroupedStringCache) Contains(searchString string, groups []string)
 		panic(err)
 	}*/
 
-	resp, err := r.rdb.DoCache(context.Background(), r.rdb.B().Smismember().Key(r.entryKey(searchString)).Member(groups...).Cache(), time.Minute).AsIntSlice()
+	resp, err := r.rdb.DoCache(context.Background(), r.rdb.B().Smismember().Key(r.entryKey(searchString)).Member(groups...).Cache(), time.Hour).AsIntSlice()
 	if err != nil {
 		panic(err)
 	}
