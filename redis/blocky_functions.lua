@@ -7,7 +7,7 @@ local function blocky_ismember(keys, args)
         if im == true then
             ir = string.match(keys[i], '[^:]+$')
             if ir ~= nil then
-                res[i] = ir
+                table.insert(res, ir)
             end
         end
     end
