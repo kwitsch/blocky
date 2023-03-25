@@ -3,12 +3,15 @@ package stringcache
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/0xERR0R/blocky/log"
 	"github.com/hako/durafmt"
 	"github.com/rueian/rueidis"
 )
+
+const cacheGrp string = "__cache__"
 
 type RedisGroupedStringCache struct {
 	rdb       rueidis.Client
@@ -26,12 +29,14 @@ func (r *RedisGroupedStringCache) groupKey(groupName string) string {
 	return fmt.Sprintf("blocky:cache:%s:%s", r.groupType, groupName)
 }
 
-func (r *RedisGroupedStringCache) entryKey(entry string) string {
-	return fmt.Sprintf("blocky:cache:%s:entries:%s", r.groupType, entry)
+func (r *RedisGroupedStringCache) entryKey(searchString string, groups []string) string {
+	return fmt.Sprintf("%s-%s",
+		strings.ReplaceAll(searchString, ":", "#"),
+		strings.Join(groups, "+"))
 }
 
 func (r *RedisGroupedStringCache) ElementCount(group string) int {
-	res, err := r.rdb.DoCache(context.Background(), r.rdb.B().Scard().Key(r.groupKey(group)).Cache(), 600*time.Second).ToInt64()
+	res, err := r.rdb.DoCache(context.Background(), r.rdb.B().Scard().Key(r.groupKey(group)).Cache(), 10*time.Second).ToInt64()
 	if err != nil {
 		return 0
 	}
@@ -40,62 +45,66 @@ func (r *RedisGroupedStringCache) ElementCount(group string) int {
 
 func (r *RedisGroupedStringCache) Contains(searchString string, groups []string) []string {
 	start := time.Now()
-
 	var result []string
 
-	/* slowest
-	var cmds []rueidis.CacheableTTL
-	for _, group := range groups {
-		cmds = append(cmds, rueidis.CT(r.rdb.B().Sismember().Key(r.cacheKey(group)).Member(searchString).Cache(), time.Second))
-	}
-	resps := r.rdb.DoMultiCache(context.Background(), cmds...)
+	cTime := time.Minute
+	entryKey := r.entryKey(searchString, groups)
+	entryHit := fmt.Sprintf("%s-hit", entryKey)
+	entryGrp := fmt.Sprintf("%s-grp", entryKey)
 
-	for ix, group := range groups {
-		r, err := resps[ix].AsBool()
+	cKey := r.groupKey(cacheGrp)
+	b, err := r.rdb.DoCache(context.Background(), r.rdb.B().Hget().Key(cKey).Field(entryHit).Cache(), cTime).AsBool()
+	if rueidis.IsRedisNil(err) {
+		b = r.cacheMembers(searchString, cKey, entryHit, entryGrp, groups, false, cTime)
+	} else if err != nil {
+		panic(err)
+	}
+
+	if b {
+		resp := r.rdb.DoCache(context.Background(), r.rdb.B().Hget().Key(cKey).Field(entryGrp).Cache(), cTime)
+		s, err := resp.ToString()
 		if err != nil {
 			panic(err)
 		}
-		if r {
-			result = append(result, group)
+		for _, ss := range strings.Split(s, ",") {
+			result = append(result, ss)
 		}
+		go r.cacheMembers(searchString, cKey, entryKey, entryGrp, groups, true, cTime)
 	}
-	*/
 
-	/*        faster
-	for _, group := range groups {
-		r, err := r.rdb.DoCache(context.Background(), r.rdb.B().Sismember().Key(r.cacheKey(group)).Member(searchString).Cache(), time.Minute).AsBool()
-		if err != nil {
-			panic(err)
-		}
-		if r {
-			result = append(result, group)
-			//break
-		}
-	}*/
+	/*
+		for _, group := range groups {
+			r, err := r.rdb.DoCache(context.Background(), r.rdb.B().Sismember().Key(r.groupKey(group)).Member(searchString).Cache(), time.Minute).AsBool()
+			if err != nil {
+				panic(err)
+			}
+			if r {
+				result = append(result, group)
+				//break
+			}
+		}*/
+	log.PrefixedLog("redis").Debugf("lookup for '%s': in groups: %v result: %v, duration %s", searchString, groups, result, durafmt.Parse(time.Since(start)).String())
+	return result
+}
 
-	/* !!test was wrong, this errors
-	var keys []string
+func (r *RedisGroupedStringCache) cacheMembers(searchString, ckey, hk, hg string, groups []string, force bool, tt time.Duration) bool {
+	keys := []string{ckey}
 	for _, group := range groups {
 		keys = append(keys, r.groupKey(group))
 	}
-
-	result, err := r.rdb.Do(context.Background(), r.rdb.B().Fcall().Function("blocky_ismember").Numkeys(int64(len(keys))).Key(keys...).Arg(searchString).Build()).AsStrSlice()
-	if err != nil {
-		panic(err)
-	}*/
-
-	resp, err := r.rdb.DoCache(context.Background(), r.rdb.B().Smismember().Key(r.entryKey(searchString)).Member(groups...).Cache(), time.Hour).AsIntSlice()
+	f := "0"
+	if force {
+		f = "1"
+	}
+	res, err := r.rdb.Do(context.Background(), r.rdb.B().Fcall().
+		Function("blocky_cache_members").
+		Numkeys(int64(len(keys))).
+		Key(keys...).Arg(searchString, hk, hg, f, fmt.Sprintf("%d", int(tt.Seconds()))).
+		Build()).AsBool()
 	if err != nil {
 		panic(err)
 	}
-	for ix, group := range groups {
-		if resp[ix] == 1 {
-			result = append(result, group)
-		}
-	}
-
-	log.PrefixedLog("redis").Debugf("lookup for '%s': in groups: %v result: %v, duration %s", searchString, groups, result, durafmt.Parse(time.Since(start)).String())
-	return result
+	return res
 }
 
 func (r *RedisGroupedStringCache) Refresh(group string) GroupFactory {
@@ -107,9 +116,8 @@ func (r *RedisGroupedStringCache) Refresh(group string) GroupFactory {
 		groupType: r.groupType,
 	}
 
-	f.cmds = append(f.cmds,
-		r.rdb.B().Copy().Source(f.groupKey()).Destination(f.oldGroupKey()).Replace().Build(),
-		r.rdb.B().Del().Key(f.groupKey()).Build())
+	f.cmds = append(f.cmds, r.rdb.B().Del().Key(f.groupKey()).Build(),
+		r.rdb.B().Del().Key("blocky:cache:"+cacheGrp).Build())
 
 	return f
 }
@@ -124,10 +132,7 @@ type RedisGroupFactory struct {
 
 func (r *RedisGroupFactory) AddEntry(entry string) {
 	r.cmds = append(r.cmds,
-		r.rdb.B().Sadd().Key(r.groupKey()).Member(entry).Build(),
-		r.rdb.B().Sadd().Key(r.entryKey(entry)).Member(r.name).Build(),
-		r.rdb.B().Srem().Key(r.oldGroupKey()).Member(entry).Build())
-
+		r.rdb.B().Sadd().Key(r.groupKey()).Member(entry).Build())
 	r.cnt++
 }
 
@@ -136,28 +141,9 @@ func (r *RedisGroupFactory) Count() int {
 }
 
 func (r *RedisGroupFactory) Finish() {
-	//set new
 	_ = r.rdb.DoMulti(context.Background(), r.cmds...)
-
-	//unset old
-	resp, _ := r.rdb.Do(context.Background(), r.rdb.B().Smembers().Key(r.oldGroupKey()).Build()).AsStrSlice()
-	c := rueidis.Commands{}
-	for _, e := range resp {
-		c = append(c, r.rdb.B().Srem().Key(r.entryKey(e)).Member(r.name).Build())
-	}
-	if len(c) > 0 {
-		_ = r.rdb.DoMulti(context.Background(), c...)
-	}
 }
 
 func (r *RedisGroupFactory) groupKey() string {
 	return fmt.Sprintf("blocky:cache:%s:%s", r.groupType, r.name)
-}
-
-func (r *RedisGroupFactory) oldGroupKey() string {
-	return fmt.Sprintf("blocky:cache:%s:%s-old", r.groupType, r.name)
-}
-
-func (r *RedisGroupFactory) entryKey(entry string) string {
-	return fmt.Sprintf("blocky:cache:%s:entries:%s", r.groupType, entry)
 }
