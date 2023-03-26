@@ -12,30 +12,39 @@ blocking:
   clientGroupsBlock:
     default:
       - adaway
-      - hagezi
-      - yoyo
+#      - hagezi
+#      - yoyo
+#      - ads1
+#      - ads2
+#      - ads3
+#      - ads4
+#      - special
       - custom
-      - ads
-      - special
+
+
   blackLists:
     adaway:
       - https://adaway.org/hosts.txt
-    hagezi:
+#    hagezi:
       - https://raw.githubusercontent.com/hagezi/dns-blocklists/main/hosts/ultimate.txt
-    yoyo:
+#    yoyo:
       - https://pgl.yoyo.org/adservers/serverlist.php?hostformat=hosts&showintro=0&mimetype=plaintext
+#    ads1:
+      - https://s3.amazonaws.com/lists.disconnect.me/simple_ad.txt
+#    ads2:
+      - https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts
+#    ads3:
+      - http://sysctl.org/cameleon/hosts
+#    ads4:
+      - https://s3.amazonaws.com/lists.disconnect.me/simple_tracking.txt
+#    special:
+      - https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/fakenews/hosts
     custom:
       - |
         twitter.com
         facebook.com
         instagram.com
-    ads:
-      - https://s3.amazonaws.com/lists.disconnect.me/simple_ad.txt
-      - https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts
-      - http://sysctl.org/cameleon/hosts
-      - https://s3.amazonaws.com/lists.disconnect.me/simple_tracking.txt
-    special:
-      - https://raw.githubusercontent.com/StevenBlack/hosts/master/alternates/fakenews/hosts
+    
 
 caching:
   minTime: 2s

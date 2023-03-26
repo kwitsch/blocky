@@ -45,48 +45,76 @@ func (r *RedisGroupedStringCache) ElementCount(group string) int {
 
 func (r *RedisGroupedStringCache) Contains(searchString string, groups []string) []string {
 	start := time.Now()
+
 	var result []string
+	/*
+		cTime := time.Minute
+		entryKey := r.entryKey(searchString, groups)
+		entryHit := fmt.Sprintf("%s-hit", entryKey)
+		entryGrp := fmt.Sprintf("%s-grp", entryKey)
 
-	cTime := time.Minute
-	entryKey := r.entryKey(searchString, groups)
-	entryHit := fmt.Sprintf("%s-hit", entryKey)
-	entryGrp := fmt.Sprintf("%s-grp", entryKey)
-
-	cKey := r.groupKey(cacheGrp)
-	b, err := r.rdb.DoCache(context.Background(), r.rdb.B().Hget().Key(cKey).Field(entryHit).Cache(), cTime).AsBool()
-	if rueidis.IsRedisNil(err) {
-		b = r.cacheMembers(searchString, cKey, entryHit, entryGrp, groups, false, cTime)
-	} else if err != nil {
-		panic(err)
-	}
-
-	if b {
-		resp := r.rdb.DoCache(context.Background(), r.rdb.B().Hget().Key(cKey).Field(entryGrp).Cache(), cTime)
-		s, err := resp.ToString()
-		if err != nil {
+		cKey := r.groupKey(cacheGrp)
+		b, err := r.rdb.DoCache(context.Background(), r.rdb.B().Hget().Key(cKey).Field(entryHit).Cache(), cTime).AsBool()
+		if rueidis.IsRedisNil(err) {
+			b = r.cacheMembers(searchString, cKey, entryHit, entryGrp, groups, false, cTime)
+		} else if err != nil {
 			panic(err)
 		}
-		for _, ss := range strings.Split(s, ",") {
-			result = append(result, ss)
-		}
-		go r.cacheMembers(searchString, cKey, entryKey, entryGrp, groups, true, cTime)
-	}
 
-	/*
-		for _, group := range groups {
-			r, err := r.rdb.DoCache(context.Background(), r.rdb.B().Sismember().Key(r.groupKey(group)).Member(searchString).Cache(), time.Minute).AsBool()
+		if b {
+			resp := r.rdb.DoCache(context.Background(), r.rdb.B().Hget().Key(cKey).Field(entryGrp).Cache(), cTime)
+			s, err := resp.ToString()
 			if err != nil {
 				panic(err)
 			}
-			if r {
-				result = append(result, group)
-				//break
+			for _, ss := range strings.Split(s, ",") {
+				result = append(result, ss)
 			}
-		}*/
+			go r.cacheMembers(searchString, cKey, entryKey, entryGrp, groups, true, cTime)
+		}
+	*/
+
+	for _, group := range groups {
+		r, err := r.rdb.DoCache(context.Background(), r.rdb.B().Sismember().Key(r.groupKey(group)).Member(searchString).Cache(), time.Minute).AsBool()
+		if err != nil {
+			panic(err)
+		}
+		if r {
+			result = append(result, group)
+			//break
+		}
+	}
+
+	/*
+		ig := len(groups)
+		ch := make(chan string, ig)
+		defer close(ch)
+		for _, group := range groups {
+			go r.isMember(searchString, group, ch)
+		}
+		g := ""
+		for i := 0; i < ig; i++ {
+			g = <-ch
+			if len(g) > 0 {
+				result = append(result, g)
+			}
+		}
+	*/
 	log.PrefixedLog("redis").Debugf("lookup for '%s': in groups: %v result: %v, duration %s", searchString, groups, result, durafmt.Parse(time.Since(start)).String())
 	return result
 }
 
+func (r *RedisGroupedStringCache) isMember(searchString, group string, out chan<- string) {
+	res, err := r.rdb.DoCache(context.Background(), r.rdb.B().Sismember().Key(r.groupKey(group)).Member(searchString).Cache(), time.Minute*10).AsBool()
+	if err == nil && res {
+		out <- group
+		return
+	}
+
+	out <- ""
+}
+
+/*
 func (r *RedisGroupedStringCache) cacheMembers(searchString, ckey, hk, hg string, groups []string, force bool, tt time.Duration) bool {
 	keys := []string{ckey}
 	for _, group := range groups {
@@ -105,7 +133,7 @@ func (r *RedisGroupedStringCache) cacheMembers(searchString, ckey, hk, hg string
 		panic(err)
 	}
 	return res
-}
+}*/
 
 func (r *RedisGroupedStringCache) Refresh(group string) GroupFactory {
 
