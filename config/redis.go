@@ -21,6 +21,7 @@ type RedisConfig struct {
 	ShuffleInit        bool     `yaml:"shuffleInit" default:"false"`
 	LocalCacheTime     Duration `yaml:"localCacheTime" default:"10m"`
 	LocalCacheSize     int      `yaml:"localCacheSize" default:"1048576"`
+	WorkerWeight       int      `yaml:"workerWeight" default:"1"`
 	Required           bool     `yaml:"required" default:"false"` // Deprecated: always required if enabled
 	Address            string   `yaml:"address"`                  // Deprecated: use Addresses
 	SentinelAddresses  []string `yaml:"sentinelAddresses"`        // Deprecated: use Addresses

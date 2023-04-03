@@ -15,24 +15,18 @@ import (
 	"github.com/google/uuid"
 	"github.com/miekg/dns"
 	"github.com/rueian/rueidis"
+	"github.com/rueian/rueidis/rueidislock"
 	"github.com/sirupsen/logrus"
 )
 
 const (
 	SyncChannelName   = "blocky_sync"
-	CacheStorePrefix  = "blocky:cache:"
 	chanCap           = 1000
 	cacheReason       = "EXTERNAL_CACHE"
 	defaultCacheTime  = 1 * time.Second
 	messageTypeCache  = 0
 	messageTypeEnable = 1
 )
-
-// sendBuffer message
-type bufferMessage struct {
-	Key     string
-	Message *dns.Msg
-}
 
 // redis pubsub message
 type redisMessage struct {
@@ -42,26 +36,17 @@ type redisMessage struct {
 	Client  []byte `json:"c"`
 }
 
-// CacheChannel message
-type CacheMessage struct {
-	Key      string
-	Response *model.Response
-}
-
-type EnabledMessage struct {
-	State    bool          `json:"s"`
-	Duration time.Duration `json:"d,omitempty"`
-	Groups   []string      `json:"g,omitempty"`
-}
-
 // Client for redis communication
 type Client struct {
 	config         *config.RedisConfig
 	client         rueidis.Client
+	locker         rueidislock.Locker
 	l              *logrus.Entry
 	ctx            context.Context
+	ctxCancel      context.CancelFunc
 	id             []byte
-	sendBuffer     chan *bufferMessage
+	sendBuffer     chan *responseBufferMessage
+	isWorker       bool
 	CacheChannel   chan *CacheMessage
 	EnabledChannel chan *EnabledMessage
 }
@@ -80,44 +65,32 @@ func New(cfg *config.RedisConfig) (*Client, error) {
 
 	l := log.PrefixedLog("redis")
 
-	roption := generateClientOptions(cfg)
-
-	var client rueidis.Client
-
-	for i := 0; i < cfg.ConnectionAttempts; i++ {
-		l.Debugf("connection attempt %d", i)
-
-		client, err = rueidis.NewClient(roption)
-
-		if err == nil {
-			break
-		} else {
-			l.Debug(err)
-		}
-
-		time.Sleep(time.Duration(cfg.ConnectionCooldown))
-	}
-
-	l.Debug("should be created")
-
+	client, err := getRueidisClient(cfg, l)
 	if err != nil {
 		return nil, err
 	}
 
-	ctx := context.Background()
+	locker, err := getRueidisLocker(cfg, l)
+	if err != nil {
+		return nil, err
+	}
+
+	ctx, cancelFn := context.WithCancel(context.Background())
 
 	res := &Client{
 		config:         cfg,
 		client:         client,
+		locker:         locker,
 		l:              l,
 		ctx:            ctx,
+		ctxCancel:      cancelFn,
 		id:             id,
-		sendBuffer:     make(chan *bufferMessage, chanCap),
+		sendBuffer:     make(chan *responseBufferMessage, chanCap),
 		CacheChannel:   make(chan *CacheMessage, chanCap),
 		EnabledChannel: make(chan *EnabledMessage, chanCap),
 	}
 
-	res.startup()
+	go res.startup()
 
 	return res, nil
 }
@@ -125,7 +98,7 @@ func New(cfg *config.RedisConfig) (*Client, error) {
 // PublishCache publish cache to redis async
 func (c *Client) PublishCache(key string, message *dns.Msg) {
 	if len(key) > 0 && message != nil {
-		c.sendBuffer <- &bufferMessage{
+		c.sendBuffer <- &responseBufferMessage{
 			Key:     key,
 			Message: message,
 		}
@@ -158,7 +131,7 @@ func (c *Client) GetRedisCache() {
 	go func() {
 		var cursor uint64
 
-		searchKey := prefixKey("*")
+		searchKey := CategoryKey(KeyCategoryCache, "*")
 
 		for {
 			sres, err := c.client.Do(c.ctx, c.client.B().Scan().Cursor(cursor).Match(searchKey).Count(1).Build()).AsScanEntry()
@@ -193,16 +166,85 @@ func (c *Client) GetRedisCache() {
 	}()
 }
 
-func generateClientOptions(cfg *config.RedisConfig) rueidis.ClientOption {
+func (c *Client) Close() {
+	defer c.ctxCancel()
+	defer c.client.Close()
+	defer c.locker.Close()
+	defer close(c.sendBuffer)
+	defer close(c.CacheChannel)
+	defer close(c.EnabledChannel)
+}
+
+func getRueidisClient(cfg *config.RedisConfig, l *logrus.Entry) (rueidis.Client, error) {
+	coption := generateClientOptions(cfg, false)
+
+	var err error
+
+	for i := 0; i < cfg.ConnectionAttempts; i++ {
+		l.Debugf("client connection attempt %d", i)
+
+		client, err := rueidis.NewClient(coption)
+
+		if err == nil {
+			l.Debug("client connected")
+			return client, nil
+		} else {
+			l.Debug(err)
+		}
+
+		time.Sleep(time.Duration(cfg.ConnectionCooldown))
+	}
+
+	l.Debugf("client connection error: %v", err)
+
+	return nil, err
+}
+
+func getRueidisLocker(cfg *config.RedisConfig, l *logrus.Entry) (rueidislock.Locker, error) {
+	coption := generateClientOptions(cfg, true)
+	loption := rueidislock.LockerOption{
+		ClientOption: coption,
+		KeyMajority:  3,
+		KeyPrefix:    Key(KeyCategoryLock.String()),
+	}
+
+	var err error
+
+	for i := 0; i < cfg.ConnectionAttempts; i++ {
+		l.Debugf("locker connection attempt %d", i)
+
+		locker, err := rueidislock.NewLocker(loption)
+
+		if err == nil {
+			l.Debug("locker connected")
+			return locker, nil
+		} else {
+			l.Debug(err)
+		}
+
+		time.Sleep(time.Duration(cfg.ConnectionCooldown))
+	}
+
+	l.Debugf("locker connection error: %v", err)
+
+	return nil, err
+}
+
+func generateClientOptions(cfg *config.RedisConfig, locker bool) rueidis.ClientOption {
 	res := rueidis.ClientOption{
-		InitAddress:           cfg.Addresses,
-		Password:              cfg.Password,
-		Username:              cfg.Username,
-		SelectDB:              cfg.Database,
-		RingScaleEachConn:     cfg.ConnRingScale,
-		CacheSizeEachConn:     cfg.LocalCacheSize,
-		ClientName:            fmt.Sprintf("blocky-%s", util.HostnameString()),
-		ClientTrackingOptions: []string{"PREFIX", "blocky:", "BCAST"},
+		InitAddress:       cfg.Addresses,
+		Password:          cfg.Password,
+		Username:          cfg.Username,
+		SelectDB:          cfg.Database,
+		RingScaleEachConn: cfg.ConnRingScale,
+		CacheSizeEachConn: cfg.LocalCacheSize,
+	}
+
+	if locker {
+		res.ClientName = fmt.Sprintf("blocky_locker-%s", util.HostnameString())
+	} else {
+		res.ClientName = fmt.Sprintf("blocky-%s", util.HostnameString())
+		res.ClientTrackingOptions = []string{"PREFIX", "blocky:", "BCAST"}
 	}
 
 	if len(cfg.SentinelMasterSet) > 0 {
@@ -218,38 +260,47 @@ func generateClientOptions(cfg *config.RedisConfig) rueidis.ClientOption {
 
 // startup starts a new goroutine for subscription and translation
 func (c *Client) startup() {
-	go func() {
-		dc, cancel := c.client.Dedicate()
-		defer cancel()
+	disconnect, closePSClient := c.setupPubSub()
+	defer closePSClient()
 
-		wait := dc.SetPubSubHooks(rueidis.PubSubHooks{
-			OnMessage: func(m rueidis.PubSubMessage) {
-				if m.Channel == SyncChannelName {
-					c.l.Debug("Received message: ", m)
-
-					if len(m.Message) > 0 {
-						// message is not empty
-						c.processReceivedMessage(m.Message)
-					}
-				}
-			},
-		})
-
-		dc.Do(c.ctx, dc.B().Subscribe().Channel(SyncChannelName).Build())
-
-		for {
-			select {
-			case <-wait:
-				return
-			// publish message from buffer
-			case s := <-c.sendBuffer:
-				c.publishMessageFromBuffer(s)
-			}
+	for {
+		select {
+		// subscriber disconnected -> reconnect
+		case <-disconnect:
+			closePSClient()
+			disconnect, closePSClient = c.setupPubSub()
+		// redis client is closed
+		case <-c.ctx.Done():
+			return
+		// publish message from buffer
+		case s := <-c.sendBuffer:
+			c.publishMessageFromBuffer(s)
 		}
-	}()
+	}
 }
 
-func (c *Client) publishMessageFromBuffer(s *bufferMessage) {
+func (c *Client) setupPubSub() (<-chan error, func()) {
+	dc, cancel := c.client.Dedicate()
+
+	disconnect := dc.SetPubSubHooks(rueidis.PubSubHooks{
+		OnMessage: func(m rueidis.PubSubMessage) {
+			if m.Channel == SyncChannelName {
+				c.l.Debug("Received message: ", m)
+
+				if len(m.Message) > 0 {
+					// message is not empty
+					c.processReceivedMessage(m.Message)
+				}
+			}
+		},
+	})
+
+	dc.Do(c.ctx, dc.B().Subscribe().Channel(SyncChannelName).Build())
+
+	return disconnect, cancel
+}
+
+func (c *Client) publishMessageFromBuffer(s *responseBufferMessage) {
 	origRes := s.Message
 	origRes.Compress = true
 	binRes, pErr := origRes.Pack()
@@ -272,7 +323,7 @@ func (c *Client) publishMessageFromBuffer(s *bufferMessage) {
 
 		c.client.Do(c.ctx,
 			c.client.B().Setex().
-				Key(prefixKey(s.Key)).
+				Key(CategoryKey(KeyCategoryCache, "query", "response", s.Key)).
 				Seconds(int64(c.getTTL(origRes).Seconds())).
 				Value(rueidis.BinaryString(binRes)).
 				Build())
@@ -332,7 +383,7 @@ func (c *Client) getResponse(key string) (*CacheMessage, error) {
 			var result *CacheMessage
 
 			result, err = convertMessage(&redisMessage{
-				Key:     cleanKey(key),
+				Key:     strings.TrimPrefix(key, CategoryKey(KeyCategoryCache)),
 				Message: resp,
 			}, ttl)
 			if err != nil {
@@ -389,12 +440,10 @@ func (c *Client) getTTL(dns *dns.Msg) time.Duration {
 	return time.Duration(ttl) * time.Second
 }
 
-// prefixKey with CacheStorePrefix
-func prefixKey(key string) string {
-	return fmt.Sprintf("%s%s", CacheStorePrefix, key)
+func Key(sks ...string) string {
+	return fmt.Sprintf("blocky:%s", strings.Join(sks, ":"))
 }
 
-// cleanKey trims CacheStorePrefix prefix
-func cleanKey(key string) string {
-	return strings.TrimPrefix(key, CacheStorePrefix)
+func CategoryKey(kc KeyCategory, sks ...string) string {
+	return fmt.Sprintf("blocky:%s:%s", kc.String(), strings.Join(sks, ":"))
 }
