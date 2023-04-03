@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/0xERR0R/blocky/config"
@@ -20,12 +21,13 @@ import (
 )
 
 const (
-	SyncChannelName   = "blocky_sync"
-	chanCap           = 1000
-	cacheReason       = "EXTERNAL_CACHE"
-	defaultCacheTime  = 1 * time.Second
-	messageTypeCache  = 0
-	messageTypeEnable = 1
+	SyncChannelName         = "blocky_sync"
+	chanCap                 = 1000
+	cacheReason             = "EXTERNAL_CACHE"
+	defaultCacheTime        = 1 * time.Minute
+	workerNeogationInterval = 5 * time.Second
+	messageTypeCache        = 0
+	messageTypeEnable       = 1
 )
 
 // redis pubsub message
@@ -41,6 +43,7 @@ type Client struct {
 	config         *config.RedisConfig
 	client         rueidis.Client
 	locker         rueidislock.Locker
+	mux            sync.Mutex
 	l              *logrus.Entry
 	ctx            context.Context
 	ctxCancel      context.CancelFunc
@@ -175,6 +178,31 @@ func (c *Client) Close() {
 	defer close(c.EnabledChannel)
 }
 
+func (c *Client) RunLocked(lt LockType, suf string, wait bool, task func(context.Context) error) error {
+	key := lt.String()
+	if len(suf) > 0 {
+		key = fmt.Sprintf("%s-%s", key, suf)
+	}
+
+	var ctx context.Context
+	var cancel context.CancelFunc
+	var err error
+
+	if wait {
+		ctx, cancel, err = c.locker.WithContext(context.Background(), key)
+	} else {
+		ctx, cancel, err = c.locker.TryWithContext(context.Background(), key)
+	}
+
+	if err != nil {
+		return err
+	}
+
+	defer cancel()
+
+	return task(ctx)
+}
+
 func getRueidisClient(cfg *config.RedisConfig, l *logrus.Entry) (rueidis.Client, error) {
 	coption := generateClientOptions(cfg, false)
 
@@ -263,12 +291,17 @@ func (c *Client) startup() {
 	disconnect, closePSClient := c.setupPubSub()
 	defer closePSClient()
 
+	timer := time.NewTicker(workerNeogationInterval)
+	defer timer.Stop()
+
 	for {
 		select {
 		// subscriber disconnected -> reconnect
 		case <-disconnect:
 			closePSClient()
 			disconnect, closePSClient = c.setupPubSub()
+		case <-timer.C:
+			c.neogateWorker()
 		// redis client is closed
 		case <-c.ctx.Done():
 			return
@@ -277,6 +310,38 @@ func (c *Client) startup() {
 			c.publishMessageFromBuffer(s)
 		}
 	}
+}
+
+func (c *Client) neogateWorker() {
+	key := CategoryKey(KeyCategoryConfig, "active_worker_weight")
+	oww := int64(c.config.WorkerWeight)
+	wnis := int64(workerNeogationInterval.Seconds())
+
+	c.RunLocked(LockTypeWorkerNeogation, "", true, func(ctx context.Context) error {
+		caw, err := c.client.DoCache(ctx, c.client.B().Get().Key(key).Cache(), workerNeogationInterval).AsInt64()
+		if rueidis.IsRedisNil(err) || (err == nil && caw < oww) {
+			c.client.DoMulti(ctx,
+				c.client.B().Set().Key(key).Value(fmt.Sprintf("%d", oww)).Build(),
+				c.client.B().Expire().Key(key).Seconds(wnis).Build())
+			return nil
+		} else if err != nil {
+			return err
+		}
+
+		if caw == oww {
+			return c.client.Do(ctx, c.client.B().Expire().Key(key).Seconds(wnis).Build()).Error()
+		}
+
+		return nil
+	})
+
+	c.mux.Lock()
+	defer c.mux.Unlock()
+	caw, err := c.client.DoCache(c.ctx, c.client.B().Get().Key(key).Cache(), workerNeogationInterval).AsInt64()
+	if err == nil {
+		c.isWorker = (caw == oww)
+	}
+
 }
 
 func (c *Client) setupPubSub() (<-chan error, func()) {

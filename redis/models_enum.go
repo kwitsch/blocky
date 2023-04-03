@@ -141,3 +141,61 @@ func (x *KeyCategory) UnmarshalText(text []byte) error {
 	*x = tmp
 	return nil
 }
+
+const (
+	// LockTypeWorkerNeogation is a LockType of type worker_neogation.
+	// neogate currently used workers
+	LockTypeWorkerNeogation LockType = "worker_neogation"
+)
+
+var ErrInvalidLockType = fmt.Errorf("not a valid LockType, try [%s]", strings.Join(_LockTypeNames, ", "))
+
+var _LockTypeNames = []string{
+	string(LockTypeWorkerNeogation),
+}
+
+// LockTypeNames returns a list of possible string values of LockType.
+func LockTypeNames() []string {
+	tmp := make([]string, len(_LockTypeNames))
+	copy(tmp, _LockTypeNames)
+	return tmp
+}
+
+// String implements the Stringer interface.
+func (x LockType) String() string {
+	return string(x)
+}
+
+// IsValid provides a quick way to determine if the typed value is
+// part of the allowed enumerated values
+func (x LockType) IsValid() bool {
+	_, err := ParseLockType(string(x))
+	return err == nil
+}
+
+var _LockTypeValue = map[string]LockType{
+	"worker_neogation": LockTypeWorkerNeogation,
+}
+
+// ParseLockType attempts to convert a string to a LockType.
+func ParseLockType(name string) (LockType, error) {
+	if x, ok := _LockTypeValue[name]; ok {
+		return x, nil
+	}
+	return LockType(""), fmt.Errorf("%s is %w", name, ErrInvalidLockType)
+}
+
+// MarshalText implements the text marshaller method.
+func (x LockType) MarshalText() ([]byte, error) {
+	return []byte(string(x)), nil
+}
+
+// UnmarshalText implements the text unmarshaller method.
+func (x *LockType) UnmarshalText(text []byte) error {
+	tmp, err := ParseLockType(string(text))
+	if err != nil {
+		return err
+	}
+	*x = tmp
+	return nil
+}

@@ -22,6 +22,11 @@ type KeyCategory string
 // )
 type ChannelName string
 
+// LockType represents used redis locks ENUM(
+// worker_neogation // neogate currently used workers
+// )
+type LockType string
+
 // Redis CacheChannel message
 type CacheMessage struct {
 	Key      string
