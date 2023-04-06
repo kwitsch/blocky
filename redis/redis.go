@@ -43,7 +43,7 @@ type Client struct {
 	config         *config.RedisConfig
 	client         rueidis.Client
 	locker         rueidislock.Locker
-	mux            sync.Mutex
+	mux            sync.RWMutex
 	l              *logrus.Entry
 	ctx            context.Context
 	ctxCancel      context.CancelFunc
@@ -176,6 +176,22 @@ func (c *Client) Close() {
 	defer close(c.sendBuffer)
 	defer close(c.CacheChannel)
 	defer close(c.EnabledChannel)
+}
+
+func (c *Client) DoWorkerTask(name string, task func(context.Context) error) error {
+	c.mux.RLock()
+	defer c.mux.RUnlock()
+
+	if !c.isWorker {
+		return nil
+	}
+
+	err := c.RunLocked(LockTypeWorkerTask, name, false, task)
+	if err == rueidislock.ErrNotLocked {
+		return nil
+	}
+
+	return err
 }
 
 func (c *Client) RunLocked(lt LockType, suf string, wait bool, task func(context.Context) error) error {

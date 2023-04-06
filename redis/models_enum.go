@@ -146,12 +146,16 @@ const (
 	// LockTypeWorkerNeogation is a LockType of type worker_neogation.
 	// neogate currently used workers
 	LockTypeWorkerNeogation LockType = "worker_neogation"
+	// LockTypeWorkerTask is a LockType of type worker_task.
+	// worker task
+	LockTypeWorkerTask LockType = "worker_task"
 )
 
 var ErrInvalidLockType = fmt.Errorf("not a valid LockType, try [%s]", strings.Join(_LockTypeNames, ", "))
 
 var _LockTypeNames = []string{
 	string(LockTypeWorkerNeogation),
+	string(LockTypeWorkerTask),
 }
 
 // LockTypeNames returns a list of possible string values of LockType.
@@ -175,6 +179,7 @@ func (x LockType) IsValid() bool {
 
 var _LockTypeValue = map[string]LockType{
 	"worker_neogation": LockTypeWorkerNeogation,
+	"worker_task":      LockTypeWorkerTask,
 }
 
 // ParseLockType attempts to convert a string to a LockType.
