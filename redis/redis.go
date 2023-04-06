@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -28,6 +29,7 @@ const (
 	workerNeogationInterval = 5 * time.Second
 	messageTypeCache        = 0
 	messageTypeEnable       = 1
+	lockKeyMajority         = 4
 )
 
 // redis pubsub message
@@ -181,6 +183,7 @@ func (c *Client) Close() {
 func (c *Client) IsWorker() bool {
 	c.mux.RLock()
 	defer c.mux.RUnlock()
+
 	return c.isWorker
 }
 
@@ -190,7 +193,7 @@ func (c *Client) DoWorkerTask(name string, task func(context.Context) error) err
 	}
 
 	err := c.RunLocked(LockTypeWorkerTask, name, false, task)
-	if err == rueidislock.ErrNotLocked {
+	if errors.Is(err, rueidislock.ErrNotLocked) {
 		return nil
 	}
 
@@ -204,7 +207,9 @@ func (c *Client) RunLocked(lt LockType, suf string, wait bool, task func(context
 	}
 
 	var ctx context.Context
+
 	var cancel context.CancelFunc
+
 	var err error
 
 	if wait {
@@ -230,14 +235,17 @@ func getRueidisClient(cfg *config.RedisConfig, l *logrus.Entry) (rueidis.Client,
 	for i := 0; i < cfg.ConnectionAttempts; i++ {
 		l.Debugf("client connection attempt %d", i)
 
-		client, err := rueidis.NewClient(coption)
+		client, ierr := rueidis.NewClient(coption)
 
-		if err == nil {
+		if ierr == nil {
 			l.Debug("client connected")
+
 			return client, nil
-		} else {
-			l.Debug(err)
 		}
+
+		l.Debug(ierr)
+
+		err = ierr
 
 		time.Sleep(time.Duration(cfg.ConnectionCooldown))
 	}
@@ -251,7 +259,7 @@ func getRueidisLocker(cfg *config.RedisConfig, l *logrus.Entry) (rueidislock.Loc
 	coption := generateClientOptions(cfg, true)
 	loption := rueidislock.LockerOption{
 		ClientOption: coption,
-		KeyMajority:  3,
+		KeyMajority:  lockKeyMajority,
 		KeyPrefix:    Key(KeyCategoryLock.String()),
 	}
 
@@ -260,14 +268,17 @@ func getRueidisLocker(cfg *config.RedisConfig, l *logrus.Entry) (rueidislock.Loc
 	for i := 0; i < cfg.ConnectionAttempts; i++ {
 		l.Debugf("locker connection attempt %d", i)
 
-		locker, err := rueidislock.NewLocker(loption)
+		locker, ierr := rueidislock.NewLocker(loption)
 
-		if err == nil {
+		if ierr == nil {
 			l.Debug("locker connected")
+
 			return locker, nil
-		} else {
-			l.Debug(err)
 		}
+
+		l.Debug(ierr)
+
+		err = ierr
 
 		time.Sleep(time.Duration(cfg.ConnectionCooldown))
 	}
@@ -336,12 +347,13 @@ func (c *Client) neogateWorker() {
 	oww := int64(c.config.WorkerWeight)
 	wnis := int64(workerNeogationInterval.Seconds())
 
-	c.RunLocked(LockTypeWorkerNeogation, "", true, func(ctx context.Context) error {
+	err := c.RunLocked(LockTypeWorkerNeogation, "", true, func(ctx context.Context) error {
 		caw, err := c.client.DoCache(ctx, c.client.B().Get().Key(key).Cache(), workerNeogationInterval).AsInt64()
 		if rueidis.IsRedisNil(err) || (err == nil && caw < oww) {
 			c.client.DoMulti(ctx,
 				c.client.B().Set().Key(key).Value(fmt.Sprintf("%d", oww)).Build(),
 				c.client.B().Expire().Key(key).Seconds(wnis).Build())
+
 			return nil
 		} else if err != nil {
 			return err
@@ -354,13 +366,16 @@ func (c *Client) neogateWorker() {
 		return nil
 	})
 
+	c.l.Debug(err)
+
 	c.mux.Lock()
 	defer c.mux.Unlock()
+
 	caw, err := c.client.DoCache(c.ctx, c.client.B().Get().Key(key).Cache(), workerNeogationInterval).AsInt64()
+
 	if err == nil {
 		c.isWorker = (caw == oww)
 	}
-
 }
 
 func (c *Client) setupPubSub() (<-chan error, func()) {
