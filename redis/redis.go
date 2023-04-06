@@ -178,11 +178,14 @@ func (c *Client) Close() {
 	defer close(c.EnabledChannel)
 }
 
-func (c *Client) DoWorkerTask(name string, task func(context.Context) error) error {
+func (c *Client) IsWorker() bool {
 	c.mux.RLock()
 	defer c.mux.RUnlock()
+	return c.isWorker
+}
 
-	if !c.isWorker {
+func (c *Client) DoWorkerTask(name string, task func(context.Context) error) error {
+	if !c.IsWorker() {
 		return nil
 	}
 
