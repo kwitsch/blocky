@@ -12,7 +12,7 @@ import (
 // KeyCategory represents the top category of a redis key(blocky:*KeyCategory*:*key*) ENUM(
 // cache // cache entries
 // config // config entries
-// timer // redis timer
+// ticker // ticker
 // lock // locks
 // log // logs
 // )
@@ -42,4 +42,37 @@ type EnabledMessage struct {
 	State    bool          `json:"s"`
 	Duration time.Duration `json:"d,omitempty"`
 	Groups   []string      `json:"g,omitempty"`
+}
+
+type TTL time.Duration
+
+func (ttl TTL) Duration() time.Duration {
+	return time.Duration(ttl)
+}
+
+func (ttl TTL) Redis() int64 {
+	return int64(ttl.Duration().Seconds())
+}
+
+func (ttl TTL) DNS() uint32 {
+	return uint32(ttl.Duration().Seconds())
+}
+
+func TtlFromDnsMsg(msg *dns.Msg, defTtl TTL) TTL {
+	ittl := uint32(0)
+	for _, a := range msg.Answer {
+		if a.Header().Ttl > ittl {
+			ittl = a.Header().Ttl
+		}
+	}
+
+	if ittl == 0 && defTtl > 0 {
+		return defTtl
+	}
+
+	return TTL(time.Duration(ittl) * time.Second)
+}
+
+func TtlFromSeconds(s uint64) TTL {
+	return TTL(time.Duration(s) * time.Second)
 }

@@ -24,7 +24,7 @@ const (
 	blockyKeyPrefix   = "blocky:"
 	chanCap           = 1000
 	cacheReason       = "EXTERNAL_CACHE"
-	defaultCacheTime  = 1 * time.Second
+	defaultCacheTime  = TTL(1 * time.Second)
 	messageTypeCache  = 0
 	messageTypeEnable = 1
 )
@@ -201,7 +201,7 @@ func (c *Client) startup() {
 		c.client.Do(c.ctx, c.client.B().
 			ConfigSet().
 			ParameterValue().
-			ParameterValue("notify-keyspace-events", "Ex").
+			ParameterValue("notify-keyspace-events", "Kx").
 			Build())
 
 		cc, cCancel := c.client.Dedicate()
@@ -256,7 +256,7 @@ func (c *Client) publishMessageFromBuffer(s *bufferMessage) {
 		c.client.Do(c.ctx,
 			c.client.B().Setex().
 				Key(CategoryKey(KeyCategoryCache, "response", s.Key)).
-				Seconds(int64(c.getTTL(origRes).Seconds())).
+				Seconds(TtlFromDnsMsg(origRes, defaultCacheTime).Redis()).
 				Value(rueidis.BinaryString(binRes)).
 				Build())
 	}
@@ -309,7 +309,7 @@ func (c *Client) getResponse(key string) (*CacheMessage, error) {
 			c.client.B().Ttl().
 				Key(key).
 				Build()).AsUint64()
-		ttl := time.Second * time.Duration(uittl)
+		ttl := TtlFromSeconds(uittl)
 
 		if err == nil {
 			var result *CacheMessage
@@ -330,14 +330,14 @@ func (c *Client) getResponse(key string) (*CacheMessage, error) {
 }
 
 // convertMessage converts redisMessage to CacheMessage
-func convertMessage(message *redisMessage, ttl time.Duration) (*CacheMessage, error) {
+func convertMessage(message *redisMessage, ttl TTL) (*CacheMessage, error) {
 	msg := dns.Msg{}
 
 	err := msg.Unpack(message.Message)
 	if err == nil {
 		if ttl > 0 {
 			for _, a := range msg.Answer {
-				a.Header().Ttl = uint32(ttl.Seconds())
+				a.Header().Ttl = ttl.DNS()
 			}
 		}
 
@@ -354,22 +354,6 @@ func convertMessage(message *redisMessage, ttl time.Duration) (*CacheMessage, er
 	}
 
 	return nil, err
-}
-
-// getTTL of dns message or return defaultCacheTime if 0
-func (c *Client) getTTL(msg *dns.Msg) time.Duration {
-	ttl := uint32(0)
-	for _, a := range msg.Answer {
-		if a.Header().Ttl > ttl {
-			ttl = a.Header().Ttl
-		}
-	}
-
-	if ttl == 0 {
-		return defaultCacheTime
-	}
-
-	return time.Duration(ttl) * time.Second
 }
 
 func (c *Client) expiredPattern() string {
