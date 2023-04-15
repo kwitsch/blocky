@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -20,7 +21,7 @@ import (
 
 const (
 	SyncChannelName   = "blocky_sync"
-	CacheStorePrefix  = "blocky:cache:"
+	blockyKeyPrefix   = "blocky:"
 	chanCap           = 1000
 	cacheReason       = "EXTERNAL_CACHE"
 	defaultCacheTime  = 1 * time.Second
@@ -28,31 +29,9 @@ const (
 	messageTypeEnable = 1
 )
 
-// sendBuffer message
-type bufferMessage struct {
-	Key     string
-	Message *dns.Msg
-}
-
-// redis pubsub message
-type redisMessage struct {
-	Key     string `json:"k,omitempty"`
-	Type    int    `json:"t"`
-	Message []byte `json:"m"`
-	Client  []byte `json:"c"`
-}
-
-// CacheChannel message
-type CacheMessage struct {
-	Key      string
-	Response *model.Response
-}
-
-type EnabledMessage struct {
-	State    bool          `json:"s"`
-	Duration time.Duration `json:"d,omitempty"`
-	Groups   []string      `json:"g,omitempty"`
-}
+var (
+	expiredRegex = regexp.MustCompile(`__keyevent@\d+__:expired`)
+)
 
 // Client for redis communication
 type Client struct {
@@ -158,7 +137,7 @@ func (c *Client) GetRedisCache() {
 	go func() {
 		var cursor uint64
 
-		searchKey := prefixKey("*")
+		searchKey := CategoryKey(KeyCategoryCache, "response", "*")
 
 		for {
 			sres, err := c.client.Do(c.ctx, c.client.B().Scan().Cursor(cursor).Match(searchKey).Count(1).Build()).AsScanEntry()
@@ -202,7 +181,7 @@ func generateClientOptions(cfg *config.RedisConfig) rueidis.ClientOption {
 		RingScaleEachConn:     cfg.ConnRingScale,
 		CacheSizeEachConn:     cfg.LocalCacheSize,
 		ClientName:            fmt.Sprintf("blocky-%s", util.HostnameString()),
-		ClientTrackingOptions: []string{"PREFIX", "blocky:", "BCAST"},
+		ClientTrackingOptions: []string{"PREFIX", blockyKeyPrefix, "BCAST"},
 	}
 
 	if len(cfg.SentinelMasterSet) > 0 {
@@ -219,27 +198,31 @@ func generateClientOptions(cfg *config.RedisConfig) rueidis.ClientOption {
 // startup starts a new goroutine for subscription and translation
 func (c *Client) startup() {
 	go func() {
-		dc, cancel := c.client.Dedicate()
-		defer cancel()
+		c.client.Do(c.ctx, c.client.B().
+			ConfigSet().
+			ParameterValue().
+			ParameterValue("notify-keyspace-events", "Ex").
+			Build())
 
-		wait := dc.SetPubSubHooks(rueidis.PubSubHooks{
+		cc, cCancel := c.client.Dedicate()
+		defer cCancel()
+
+		cWait := cc.SetPubSubHooks(rueidis.PubSubHooks{
 			OnMessage: func(m rueidis.PubSubMessage) {
-				if m.Channel == SyncChannelName {
+				if expiredRegex.MatchString(m.Channel) {
+					c.l.Debug("Key expired: ", m.Message)
+				} else {
 					c.l.Debug("Received message: ", m)
-
-					if len(m.Message) > 0 {
-						// message is not empty
-						c.processReceivedMessage(m.Message)
-					}
 				}
 			},
 		})
 
-		dc.Do(c.ctx, dc.B().Subscribe().Channel(SyncChannelName).Build())
+		cc.Do(c.ctx, cc.B().Subscribe().Channel(SyncChannelName).Build())
+		cc.Do(c.ctx, cc.B().Psubscribe().Pattern(c.expiredPattern()).Build())
 
 		for {
 			select {
-			case <-wait:
+			case <-cWait:
 				return
 			// publish message from buffer
 			case s := <-c.sendBuffer:
@@ -272,7 +255,7 @@ func (c *Client) publishMessageFromBuffer(s *bufferMessage) {
 
 		c.client.Do(c.ctx,
 			c.client.B().Setex().
-				Key(prefixKey(s.Key)).
+				Key(CategoryKey(KeyCategoryCache, "response", s.Key)).
 				Seconds(int64(c.getTTL(origRes).Seconds())).
 				Value(rueidis.BinaryString(binRes)).
 				Build())
@@ -332,7 +315,7 @@ func (c *Client) getResponse(key string) (*CacheMessage, error) {
 			var result *CacheMessage
 
 			result, err = convertMessage(&redisMessage{
-				Key:     cleanKey(key),
+				Key:     strings.TrimPrefix(key, CategoryKey(KeyCategoryCache, "response")),
 				Message: resp,
 			}, ttl)
 			if err != nil {
@@ -389,12 +372,18 @@ func (c *Client) getTTL(msg *dns.Msg) time.Duration {
 	return time.Duration(ttl) * time.Second
 }
 
-// prefixKey with CacheStorePrefix
-func prefixKey(key string) string {
-	return fmt.Sprintf("%s%s", CacheStorePrefix, key)
+func (c *Client) expiredPattern() string {
+	return fmt.Sprintf("__keyevent@%d__:expired", c.config.Database)
 }
 
-// cleanKey trims CacheStorePrefix prefix
-func cleanKey(key string) string {
-	return strings.TrimPrefix(key, CacheStorePrefix)
+func (c *Client) isBlockyExpired(m rueidis.PubSubMessage) bool {
+	return expiredRegex.MatchString(m.Channel) && strings.HasPrefix(m.Message, blockyKeyPrefix)
+}
+
+func Key(sks ...string) string {
+	return fmt.Sprintf("%s%s", blockyKeyPrefix, strings.Join(sks, ":"))
+}
+
+func CategoryKey(kc KeyCategory, sks ...string) string {
+	return fmt.Sprintf("%s%s:%s", blockyKeyPrefix, kc.String(), strings.Join(sks, ":"))
 }
