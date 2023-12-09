@@ -36,13 +36,17 @@ const (
 	blockyImage       = "blocky-e2e"
 )
 
+// networks is a list of networks created by WithNetwork for cleanup purpose
+//
 //nolint:gochecknoglobals
 var networks = []testcontainers.Network{}
 
+// getNetworkName returns a unique network name for the current test process
 func getNetworkName() string {
 	return fmt.Sprintf("blocky-e2e-network_%d", ginkgo.GinkgoParallelProcess())
 }
 
+// deferTerminate adds a defer function to terminate the container if it is running and not in removing state.
 func deferTerminate[T testcontainers.Container](container T, err error) (T, error) {
 	ginkgo.DeferCleanup(func(ctx context.Context) error {
 		if container.IsRunning() {
@@ -101,8 +105,8 @@ func createHTTPServerContainer(ctx context.Context, alias string, tmpDir *helper
 	return deferTerminate(startGenericContainer(ctx, alias, req))
 }
 
-func startGenericContainer(ctx context.Context, alias string,
-	req testcontainers.ContainerRequest,
+// startGenericContainer starts a container with the given request and attaches it to the test network
+func startGenericContainer(ctx context.Context, alias string, req testcontainers.ContainerRequest,
 ) (testcontainers.Container, error) {
 	greq := testcontainers.GenericContainerRequest{
 		ContainerRequest: req,
@@ -113,6 +117,7 @@ func startGenericContainer(ctx context.Context, alias string,
 	return testcontainers.GenericContainer(ctx, greq)
 }
 
+// WithNetwork attaches the container with the given alias to the test network
 func WithNetwork(ctx context.Context, alias string) testcontainers.CustomizeRequestOption {
 	return func(req *testcontainers.GenericContainerRequest) {
 		networkName := getNetworkName()
