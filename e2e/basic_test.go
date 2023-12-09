@@ -14,8 +14,15 @@ import (
 )
 
 var _ = Describe("Basic functional tests", func() {
-	var blocky testcontainers.Container
-	var err error
+	var (
+		blocky testcontainers.Container
+		err    error
+		tmpDir *TmpFolder
+	)
+
+	BeforeEach(func(ctx context.Context) {
+		tmpDir = NewTmpFolder("config")
+	})
 
 	Describe("Container start", func() {
 		BeforeEach(func(ctx context.Context) {

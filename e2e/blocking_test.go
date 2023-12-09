@@ -11,9 +11,15 @@ import (
 )
 
 var _ = Describe("External lists and query blocking", func() {
-	var blocky testcontainers.Container
-	var err error
+	var (
+		blocky testcontainers.Container
+		err    error
+		tmpDir *TmpFolder
+	)
+
 	BeforeEach(func(ctx context.Context) {
+		tmpDir = NewTmpFolder("config")
+
 		_, err = createDNSMokkaContainer(ctx, "moka", `A google/NOERROR("A 1.2.3.4 123")`)
 		Expect(err).Should(Succeed())
 	})

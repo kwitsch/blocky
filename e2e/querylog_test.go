@@ -3,6 +3,7 @@ package e2e
 import (
 	"context"
 
+	. "github.com/0xERR0R/blocky/helpertest"
 	"github.com/0xERR0R/blocky/util"
 	"github.com/miekg/dns"
 	. "github.com/onsi/ginkgo/v2"
@@ -16,13 +17,18 @@ import (
 )
 
 var _ = Describe("Query logs functional tests", func() {
-	var blocky testcontainers.Container
-	var postgresDB *postgres.PostgresContainer
-	var mariaDB *mariadb.MariaDBContainer
-	var db *gorm.DB
-	var err error
+	var (
+		blocky     testcontainers.Container
+		postgresDB *postgres.PostgresContainer
+		mariaDB    *mariadb.MariaDBContainer
+		db         *gorm.DB
+		err        error
+		tmpDir     *TmpFolder
+	)
 
 	BeforeEach(func(ctx context.Context) {
+		tmpDir = NewTmpFolder("config")
+
 		_, err = createDNSMokkaContainer(ctx, "moka1", `A google/NOERROR("A 1.2.3.4 123")`, `A unknown/NXDOMAIN()`)
 		Expect(err).Should(Succeed())
 	})

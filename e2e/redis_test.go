@@ -13,11 +13,16 @@ import (
 )
 
 var _ = Describe("Redis configuration tests", func() {
-	var blocky1, blocky2, mokka testcontainers.Container
-	var redisClient *redis.Client
-	var err error
+	var (
+		blocky1, blocky2, mokka testcontainers.Container
+		redisClient             *redis.Client
+		err                     error
+		tmpDir                  *TmpFolder
+	)
 
 	BeforeEach(func(ctx context.Context) {
+		tmpDir = NewTmpFolder("config")
+
 		redisDB, err := createRedisContainer(ctx)
 		Expect(err).Should(Succeed())
 

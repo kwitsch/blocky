@@ -12,8 +12,15 @@ import (
 )
 
 var _ = Describe("Upstream resolver configuration tests", func() {
-	var blocky testcontainers.Container
-	var err error
+	var (
+		blocky testcontainers.Container
+		err    error
+		tmpDir *TmpFolder
+	)
+
+	BeforeEach(func(ctx context.Context) {
+		tmpDir = NewTmpFolder("config")
+	})
 
 	Describe("'upstreams.init.strategy' parameter handling", func() {
 		When("'upstreams.init.strategy' is fast and upstream server as IP is not reachable", func() {

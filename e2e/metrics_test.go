@@ -16,9 +16,16 @@ import (
 )
 
 var _ = Describe("Metrics functional tests", func() {
-	var blocky testcontainers.Container
-	var err error
-	var metricsURL string
+	var (
+		blocky     testcontainers.Container
+		err        error
+		tmpDir     *TmpFolder
+		metricsURL string
+	)
+
+	BeforeEach(func(ctx context.Context) {
+		tmpDir = NewTmpFolder("config")
+	})
 
 	Describe("Metrics", func() {
 		BeforeEach(func(ctx context.Context) {
