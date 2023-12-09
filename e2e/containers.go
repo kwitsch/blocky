@@ -27,9 +27,6 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-//nolint:gochecknoglobals
-var NetworkName = fmt.Sprintf("blocky-e2e-network_%d", time.Now().Unix())
-
 const (
 	redisImage        = "redis:7"
 	postgresImage     = "postgres:15.2-alpine"
@@ -38,6 +35,13 @@ const (
 	staticServerImage = "halverneus/static-file-server:latest"
 	blockyImage       = "blocky-e2e"
 )
+
+//nolint:gochecknoglobals
+var networks = []testcontainers.Network{}
+
+func getNetworkName() string {
+	return fmt.Sprintf("blocky-e2e-network_%d", ginkgo.GinkgoParallelProcess())
+}
 
 func deferTerminate[T testcontainers.Container](container T, err error) (T, error) {
 	ginkgo.DeferCleanup(func(ctx context.Context) error {
@@ -59,18 +63,13 @@ func createDNSMokkaContainer(ctx context.Context, alias string, rules ...string)
 	}
 
 	req := testcontainers.ContainerRequest{
-		Image:          mokaImage,
-		Networks:       []string{NetworkName},
-		ExposedPorts:   []string{"53/tcp", "53/udp"},
-		NetworkAliases: map[string][]string{NetworkName: {alias}},
-		WaitingFor:     wait.ForExposedPort(),
-		Env:            mokaRules,
+		Image:        mokaImage,
+		ExposedPorts: []string{"53/tcp", "53/udp"},
+		WaitingFor:   wait.ForExposedPort(),
+		Env:          mokaRules,
 	}
 
-	return deferTerminate(testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
-		ContainerRequest: req,
-		Started:          true,
-	}))
+	return deferTerminate(startGenericContainer(ctx, alias, req))
 }
 
 func createHTTPServerContainer(ctx context.Context, alias string, tmpDir *helpertest.TmpFolder,
@@ -83,9 +82,7 @@ func createHTTPServerContainer(ctx context.Context, alias string, tmpDir *helper
 	const modeOwner = 700
 
 	req := testcontainers.ContainerRequest{
-		Image:          staticServerImage,
-		Networks:       []string{NetworkName},
-		NetworkAliases: map[string][]string{NetworkName: {alias}},
+		Image: staticServerImage,
 
 		ExposedPorts: []string{"8080/tcp"},
 		Env:          map[string]string{"FOLDER": "/"},
@@ -98,16 +95,56 @@ func createHTTPServerContainer(ctx context.Context, alias string, tmpDir *helper
 		},
 	}
 
-	return deferTerminate(testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
-		ContainerRequest: req,
-		Started:          true,
-	}))
+	return deferTerminate(startGenericContainer(ctx, alias, req))
 }
 
-func WithNetwork(network string) testcontainers.CustomizeRequestOption {
+func startGenericContainer(ctx context.Context, alias string,
+	req testcontainers.ContainerRequest,
+) (testcontainers.Container, error) {
+	greq := testcontainers.GenericContainerRequest{
+		ContainerRequest: req,
+		Started:          true,
+	}
+	WithNetwork(ctx, alias).Customize(&greq)
+
+	return testcontainers.GenericContainer(ctx, greq)
+}
+
+func WithNetwork(ctx context.Context, alias string) testcontainers.CustomizeRequestOption {
 	return func(req *testcontainers.GenericContainerRequest) {
-		req.NetworkAliases = map[string][]string{NetworkName: {network}}
-		req.Networks = []string{NetworkName}
+		networkName := getNetworkName()
+
+		network, err := testcontainers.GenericNetwork(ctx, testcontainers.GenericNetworkRequest{
+			NetworkRequest: testcontainers.NetworkRequest{
+				Name:           networkName,
+				CheckDuplicate: true, // force the Docker provider to reuse an existing network
+				Attachable:     true,
+			},
+		})
+		if err != nil && !strings.Contains(err.Error(), "already exists") {
+			logger := req.Logger
+			if logger == nil {
+				logger = testcontainers.Logger
+			}
+
+			logger.Printf("Failed to create network '%s'. Container won't be attached to this network: %v",
+				networkName, err)
+
+			return
+		}
+
+		if err == nil {
+			networks = append(networks, network)
+		}
+
+		// attaching to the network because it was created with success or it already existed.
+		req.Networks = append(req.Networks, networkName)
+
+		if req.NetworkAliases == nil {
+			req.NetworkAliases = make(map[string][]string)
+		}
+
+		req.NetworkAliases[networkName] = []string{alias}
 	}
 }
 
@@ -115,7 +152,7 @@ func createRedisContainer(ctx context.Context) (*redis.RedisContainer, error) {
 	return deferTerminate(redis.RunContainer(ctx,
 		testcontainers.WithImage(redisImage),
 		redis.WithLogLevel(redis.LogLevelVerbose),
-		WithNetwork("redis"),
+		WithNetwork(ctx, "redis"),
 	))
 }
 
@@ -132,7 +169,7 @@ func createPostgresContainer(ctx context.Context) (*postgres.PostgresContainer, 
 			wait.ForLog("database system is ready to accept connections").
 				WithOccurrence(waitLogOccurrence).
 				WithStartupTimeout(startupTimeout)),
-		WithNetwork("postgres"),
+		WithNetwork(ctx, "postgres"),
 	))
 }
 
@@ -142,7 +179,7 @@ func createMariaDBContainer(ctx context.Context) (*mariadb.MariaDBContainer, err
 		mariadb.WithDatabase("user"),
 		mariadb.WithUsername("user"),
 		mariadb.WithPassword("user"),
-		WithNetwork("mariaDB"),
+		WithNetwork(ctx, "mariaDB"),
 	))
 }
 
@@ -164,8 +201,7 @@ func createBlockyContainer(ctx context.Context, tmpDir *helpertest.TmpFolder,
 	}
 
 	req := testcontainers.ContainerRequest{
-		Image:    blockyImage,
-		Networks: []string{NetworkName},
+		Image: blockyImage,
 
 		ExposedPorts: []string{"53/tcp", "53/udp", "4000/tcp"},
 
@@ -184,10 +220,7 @@ func createBlockyContainer(ctx context.Context, tmpDir *helpertest.TmpFolder,
 		WaitingFor: wait.ForHealthCheck().WithStartupTimeout(startupTimeout),
 	}
 
-	container, err := deferTerminate(testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
-		ContainerRequest: req,
-		Started:          true,
-	}))
+	container, err := deferTerminate(startGenericContainer(ctx, "blocky", req))
 	if err != nil {
 		// attach container log if error occurs
 		if r, err := container.Logs(ctx); err == nil {
