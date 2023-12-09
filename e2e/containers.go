@@ -46,7 +46,10 @@ func getNetworkName() string {
 func deferTerminate[T testcontainers.Container](container T, err error) (T, error) {
 	ginkgo.DeferCleanup(func(ctx context.Context) error {
 		if container.IsRunning() {
-			return container.Terminate(ctx)
+			state, err := container.State(ctx)
+			if err == nil && state.Status != "removing" {
+				return container.Terminate(ctx)
+			}
 		}
 
 		return nil
