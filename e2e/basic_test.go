@@ -6,7 +6,7 @@ import (
 	"net"
 	"net/http"
 
-	e2eutil "github.com/0xERR0R/blocky/e2e/util"
+	. "github.com/0xERR0R/blocky/e2e/util"
 
 	. "github.com/0xERR0R/blocky/helpertest"
 	"github.com/0xERR0R/blocky/util"
@@ -53,7 +53,7 @@ var _ = Describe("Basic functional tests", func() {
 			It("should fail to start", func(ctx context.Context) {
 				Eventually(blocky.IsRunning, "5s", "2ms").Should(BeFalse())
 
-				Expect(e2eutil.GetContainerLogs(ctx, blocky)).
+				Expect(GetContainerLogs(ctx, blocky)).
 					Should(ContainElement(ContainSubstring("address already in use")))
 			})
 		})
@@ -181,8 +181,8 @@ var _ = Describe("Basic functional tests", func() {
 							HaveTTL(BeNumerically("<=", 123)),
 						))
 
-				Expect(e2eutil.GetContainerLogs(ctx, blocky)).ShouldNot(ContainElement(ContainSubstring("google.com")))
-				Expect(e2eutil.GetContainerLogs(ctx, blocky)).ShouldNot(ContainElement(ContainSubstring("1.2.3.4")))
+				Expect(GetContainerLogs(ctx, blocky)).ShouldNot(ContainElement(ContainSubstring("google.com")))
+				Expect(GetContainerLogs(ctx, blocky)).ShouldNot(ContainElement(ContainSubstring("1.2.3.4")))
 			})
 		})
 	})
