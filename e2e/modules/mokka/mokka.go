@@ -12,11 +12,10 @@ import (
 )
 
 const (
-	defaultImage          = "ghcr.io/0xerr0r/dns-mokka"
-	defaultRequestTimeout = 5 * time.Second
-	requestTimeoutEnv     = "DNS_REQUEST_TIMEOUT"
-	tcpPort               = "53/tcp"
-	udpPort               = "53/udp"
+	defaultImage      = "ghcr.io/0xerr0r/dns-mokka"
+	requestTimeoutEnv = "DNS_REQUEST_TIMEOUT"
+	tcpPort           = "53/tcp"
+	udpPort           = "53/udp"
 )
 
 type MokkaContainer struct {
@@ -42,7 +41,7 @@ func RunContainer(ctx context.Context, opts ...testcontainers.ContainerCustomize
 		opt.Customize(&genericContainerReq)
 	}
 
-	requestTimeout := defaultRequestTimeout
+	requestTimeout := time.Second
 
 	if strTimeout, ok := genericContainerReq.Env[requestTimeoutEnv]; ok {
 		timeout, err := time.ParseDuration(strTimeout)

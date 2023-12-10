@@ -99,9 +99,13 @@ var _ = Describe("External lists and query blocking", func() {
 		})
 	})
 	Describe("Query blocking against external blacklists", func() {
+		const listFileName = "list.txt"
 		When("external blacklists are defined and available", func() {
 			BeforeEach(func(ctx context.Context) {
-				_, err = createHTTPServerContainer(ctx, "httpserver", tmpDir, "list.txt", "blockeddomain.com")
+				httpserver, err := createHTTPServerContainer(ctx, "httpserver", listFileName, "blockeddomain.com")
+				Expect(err).Should(Succeed())
+
+				url, err := httpserver.GetFileURL(ctx, listFileName)
 				Expect(err).Should(Succeed())
 
 				blocky, err = createBlockyContainer(ctx, tmpDir,
@@ -114,7 +118,7 @@ var _ = Describe("External lists and query blocking", func() {
 					"blocking:",
 					"  blackLists:",
 					"    ads:",
-					"      - http://httpserver:8080/list.txt",
+					"      - "+url,
 					"  clientGroupsBlock:",
 					"    default:",
 					"      - ads",

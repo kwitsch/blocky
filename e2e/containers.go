@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/0xERR0R/blocky/e2e/modules/mokka"
+	staticfileserver "github.com/0xERR0R/blocky/e2e/modules/staticFileServer"
 	. "github.com/0xERR0R/blocky/e2e/util"
 	log "github.com/sirupsen/logrus"
 
@@ -33,41 +34,27 @@ const (
 	mokaImage         = "ghcr.io/0xerr0r/dns-mokka:0.2.0"
 	staticServerImage = "halverneus/static-file-server:latest"
 	blockyImage       = "blocky-e2e"
+
+	defaultRequestTimeout = 5 * time.Second
 )
 
 func createDNSMokkaContainer(ctx context.Context, alias string, rules ...string) (*mokka.MokkaContainer, error) {
 	return DeferTerminate(mokka.RunContainer(ctx,
 		testcontainers.WithImage(mokaImage),
 		mokka.WithMokkaRules(rules...),
-		mokka.WithDNSRequestTimeout(time.Second),
+		mokka.WithDNSRequestTimeout(defaultRequestTimeout),
 		WithNetwork(ctx, alias),
 	))
 }
 
-func createHTTPServerContainer(ctx context.Context, alias string, tmpDir *helpertest.TmpFolder,
+func createHTTPServerContainer(ctx context.Context, alias string,
 	filename string, lines ...string,
-) (testcontainers.Container, error) {
-	f1 := tmpDir.CreateStringFile(filename,
-		lines...,
-	)
-
-	const modeOwner = 700
-
-	req := testcontainers.ContainerRequest{
-		Image: staticServerImage,
-
-		ExposedPorts: []string{"8080/tcp"},
-		Env:          map[string]string{"FOLDER": "/"},
-		Files: []testcontainers.ContainerFile{
-			{
-				HostFilePath:      f1.Path,
-				ContainerFilePath: fmt.Sprintf("/%s", filename),
-				FileMode:          modeOwner,
-			},
-		},
-	}
-
-	return DeferTerminate(startGenericContainer(ctx, alias, req))
+) (*staticfileserver.StaticFileServerContainer, error) {
+	return DeferTerminate(staticfileserver.RunContainer(ctx,
+		testcontainers.WithImage(staticServerImage),
+		staticfileserver.WithFile(ctx, filename, lines...),
+		WithNetwork(ctx, alias),
+	))
 }
 
 // startGenericContainer starts a container with the given request and attaches it to the test network

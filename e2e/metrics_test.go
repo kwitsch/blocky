@@ -32,14 +32,17 @@ var _ = Describe("Metrics functional tests", func() {
 			_, err = createDNSMokkaContainer(ctx, "moka1", `A google/NOERROR("A 1.2.3.4 123")`)
 			Expect(err).Should(Succeed())
 
-			_, err = createHTTPServerContainer(ctx, "httpserver1", tmpDir, "list1.txt", "domain1.com")
+			httpserver1, err := createHTTPServerContainer(ctx, "httpserver1", "list1.txt", "domain1.com")
 			Expect(err).Should(Succeed())
 
-			_, err = createHTTPServerContainer(ctx, "httpserver2", tmpDir, "list2.txt",
+			url1, err := httpserver1.GetFileURL(ctx, "list1.txt")
+			Expect(err).Should(Succeed())
+
+			httpserver2, err := createHTTPServerContainer(ctx, "httpserver2", "list2.txt",
 				"domain1.com", "domain2", "domain3")
 			Expect(err).Should(Succeed())
 
-			_, err = createHTTPServerContainer(ctx, "httpserver2", tmpDir, "list2.txt", "domain1.com", "domain2", "domain3")
+			url2, err := httpserver2.GetFileURL(ctx, "list2.txt")
 			Expect(err).Should(Succeed())
 
 			blocky, err = createBlockyContainer(ctx, tmpDir,
@@ -50,9 +53,9 @@ var _ = Describe("Metrics functional tests", func() {
 				"blocking:",
 				"  blackLists:",
 				"    group1:",
-				"      - http://httpserver1:8080/list1.txt",
+				"      - "+url1,
 				"    group2:",
-				"      - http://httpserver2:8080/list2.txt",
+				"      - "+url2,
 				"ports:",
 				"  http: 4000",
 				"prometheus:",

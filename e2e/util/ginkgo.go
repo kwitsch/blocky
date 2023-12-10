@@ -31,7 +31,7 @@ func GetNetworkName() string {
 // deferTerminate adds a defer function to terminate the container if it is running and not in removing state.
 func DeferTerminate[T testcontainers.Container](container T, err error) (T, error) {
 	DeferCleanup(func(ctx context.Context) error {
-		if container.IsRunning() {
+		if err == nil && container.IsRunning() {
 			// test if container is in removing state
 			state, err := container.State(ctx)
 			if err == nil && state.Status != stateRemoving {
