@@ -4,6 +4,8 @@ import (
 	"context"
 	"strings"
 
+	e2eutil "github.com/0xERR0R/blocky/e2e/util"
+
 	. "github.com/0xERR0R/blocky/helpertest"
 	"github.com/0xERR0R/blocky/util"
 	"github.com/go-redis/redis/v8"
@@ -97,8 +99,8 @@ var _ = Describe("Redis configuration tests", func() {
 				})
 
 				By("No warnings/errors in log", func() {
-					Expect(getContainerLogs(ctx, blocky1)).Should(BeEmpty())
-					Expect(getContainerLogs(ctx, blocky2)).Should(BeEmpty())
+					Expect(e2eutil.GetContainerLogs(ctx, blocky1)).Should(BeEmpty())
+					Expect(e2eutil.GetContainerLogs(ctx, blocky2)).Should(BeEmpty())
 				})
 			})
 		})
@@ -162,8 +164,8 @@ var _ = Describe("Redis configuration tests", func() {
 				})
 
 				By("No warnings/errors in log", func() {
-					Expect(getContainerLogs(ctx, blocky1)).Should(BeEmpty())
-					Expect(getContainerLogs(ctx, blocky2)).Should(BeEmpty())
+					Expect(e2eutil.GetContainerLogs(ctx, blocky1)).Should(BeEmpty())
+					Expect(e2eutil.GetContainerLogs(ctx, blocky2)).Should(BeEmpty())
 				})
 			})
 		})

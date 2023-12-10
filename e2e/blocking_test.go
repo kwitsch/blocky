@@ -3,6 +3,8 @@ package e2e
 import (
 	"context"
 
+	e2eutil "github.com/0xERR0R/blocky/e2e/util"
+
 	. "github.com/0xERR0R/blocky/helpertest"
 	"github.com/0xERR0R/blocky/util"
 	. "github.com/onsi/ginkgo/v2"
@@ -57,7 +59,7 @@ var _ = Describe("External lists and query blocking", func() {
 								HaveTTL(BeNumerically("==", 123)),
 							))
 
-					Expect(getContainerLogs(ctx, blocky)).Should(ContainElement(ContainSubstring("cannot open source: ")))
+					Expect(e2eutil.GetContainerLogs(ctx, blocky)).Should(ContainElement(ContainSubstring("cannot open source: ")))
 				})
 			})
 			Context("loading.strategy = failOnError", func() {
@@ -90,7 +92,7 @@ var _ = Describe("External lists and query blocking", func() {
 				It("should fail to start", func(ctx context.Context) {
 					Eventually(blocky.IsRunning, "5s", "2ms").Should(BeFalse())
 
-					Expect(getContainerLogs(ctx, blocky)).
+					Expect(e2eutil.GetContainerLogs(ctx, blocky)).
 						Should(ContainElement(ContainSubstring("Error: can't start server: 1 error occurred")))
 				})
 			})
@@ -130,7 +132,7 @@ var _ = Describe("External lists and query blocking", func() {
 							HaveTTL(BeNumerically("==", 6*60*60)),
 						))
 
-				Expect(getContainerLogs(ctx, blocky)).Should(BeEmpty())
+				Expect(e2eutil.GetContainerLogs(ctx, blocky)).Should(BeEmpty())
 			})
 		})
 	})

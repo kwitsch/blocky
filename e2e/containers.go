@@ -1,7 +1,6 @@
 package e2e
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"io"
@@ -10,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	e2eutil "github.com/0xERR0R/blocky/e2e/util"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/0xERR0R/blocky/config"
@@ -46,22 +46,6 @@ func getNetworkName() string {
 	return fmt.Sprintf("blocky-e2e-network_%d", ginkgo.GinkgoParallelProcess())
 }
 
-// deferTerminate adds a defer function to terminate the container if it is running and not in removing state.
-func deferTerminate[T testcontainers.Container](container T, err error) (T, error) {
-	ginkgo.DeferCleanup(func(ctx context.Context) error {
-		if container.IsRunning() {
-			state, err := container.State(ctx)
-			if err == nil && state.Status != "removing" {
-				return container.Terminate(ctx)
-			}
-		}
-
-		return nil
-	})
-
-	return container, err
-}
-
 func createDNSMokkaContainer(ctx context.Context, alias string, rules ...string) (testcontainers.Container, error) {
 	mokaRules := make(map[string]string)
 
@@ -76,7 +60,7 @@ func createDNSMokkaContainer(ctx context.Context, alias string, rules ...string)
 		Env:          mokaRules,
 	}
 
-	return deferTerminate(startGenericContainer(ctx, alias, req))
+	return e2eutil.DeferTerminate(startGenericContainer(ctx, alias, req))
 }
 
 func createHTTPServerContainer(ctx context.Context, alias string, tmpDir *helpertest.TmpFolder,
@@ -102,7 +86,7 @@ func createHTTPServerContainer(ctx context.Context, alias string, tmpDir *helper
 		},
 	}
 
-	return deferTerminate(startGenericContainer(ctx, alias, req))
+	return e2eutil.DeferTerminate(startGenericContainer(ctx, alias, req))
 }
 
 // startGenericContainer starts a container with the given request and attaches it to the test network
@@ -157,7 +141,7 @@ func WithNetwork(ctx context.Context, alias string) testcontainers.CustomizeRequ
 }
 
 func createRedisContainer(ctx context.Context) (*redis.RedisContainer, error) {
-	return deferTerminate(redis.RunContainer(ctx,
+	return e2eutil.DeferTerminate(redis.RunContainer(ctx,
 		testcontainers.WithImage(redisImage),
 		redis.WithLogLevel(redis.LogLevelVerbose),
 		WithNetwork(ctx, "redis"),
@@ -167,7 +151,7 @@ func createRedisContainer(ctx context.Context) (*redis.RedisContainer, error) {
 func createPostgresContainer(ctx context.Context) (*postgres.PostgresContainer, error) {
 	const waitLogOccurrence = 2
 
-	return deferTerminate(postgres.RunContainer(ctx,
+	return e2eutil.DeferTerminate(postgres.RunContainer(ctx,
 		testcontainers.WithImage(postgresImage),
 
 		postgres.WithDatabase("user"),
@@ -182,7 +166,7 @@ func createPostgresContainer(ctx context.Context) (*postgres.PostgresContainer, 
 }
 
 func createMariaDBContainer(ctx context.Context) (*mariadb.MariaDBContainer, error) {
-	return deferTerminate(mariadb.RunContainer(ctx,
+	return e2eutil.DeferTerminate(mariadb.RunContainer(ctx,
 		testcontainers.WithImage(mariaDBImage),
 		mariadb.WithDatabase("user"),
 		mariadb.WithUsername("user"),
@@ -228,7 +212,7 @@ func createBlockyContainer(ctx context.Context, tmpDir *helpertest.TmpFolder,
 		WaitingFor: wait.ForHealthCheck().WithStartupTimeout(startupTimeout),
 	}
 
-	container, err := deferTerminate(startGenericContainer(ctx, "blocky", req))
+	container, err := e2eutil.DeferTerminate(startGenericContainer(ctx, "blocky", req))
 	if err != nil {
 		// attach container log if error occurs
 		if r, err := container.Logs(ctx); err == nil {
@@ -351,24 +335,4 @@ func getContainerHostPort(ctx context.Context, c testcontainers.Container, p nat
 	}
 
 	return host, res.Port(), err
-}
-
-func getContainerLogs(ctx context.Context, c testcontainers.Container) (lines []string, err error) {
-	if r, err := c.Logs(ctx); err == nil {
-		scanner := bufio.NewScanner(r)
-		for scanner.Scan() {
-			line := scanner.Text()
-			if len(strings.TrimSpace(line)) > 0 {
-				lines = append(lines, line)
-			}
-		}
-
-		if err := scanner.Err(); err != nil {
-			return nil, err
-		}
-
-		return lines, nil
-	}
-
-	return nil, err
 }

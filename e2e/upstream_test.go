@@ -3,6 +3,8 @@ package e2e
 import (
 	"context"
 
+	e2eutil "github.com/0xERR0R/blocky/e2e/util"
+
 	. "github.com/0xERR0R/blocky/helpertest"
 	"github.com/0xERR0R/blocky/util"
 	"github.com/miekg/dns"
@@ -39,8 +41,8 @@ var _ = Describe("Upstream resolver configuration tests", func() {
 			})
 			It("should start even if upstream server is not reachable", func(ctx context.Context) {
 				Expect(blocky.IsRunning()).Should(BeTrue())
-				Eventually(ctx, func() ([]string, error) {
-					return getContainerLogs(ctx, blocky)
+				Eventually(ctx, func() []string {
+					return e2eutil.GetContainerLogs(ctx, blocky)
 				}).Should(ContainElement(ContainSubstring("initial resolver test failed")))
 			})
 		})
@@ -60,7 +62,7 @@ var _ = Describe("Upstream resolver configuration tests", func() {
 			})
 			It("should start even if upstream server is not reachable", func(ctx context.Context) {
 				Expect(blocky.IsRunning()).Should(BeTrue())
-				Expect(getContainerLogs(ctx, blocky)).Should(ContainElement(ContainSubstring("initial resolver test failed")))
+				Expect(e2eutil.GetContainerLogs(ctx, blocky)).Should(ContainElement(ContainSubstring("initial resolver test failed")))
 			})
 		})
 		When("'upstreams.init.strategy' is failOnError and upstream as IP address server is not reachable", func() {
@@ -77,7 +79,7 @@ var _ = Describe("Upstream resolver configuration tests", func() {
 			})
 			It("should not start", func(ctx context.Context) {
 				Expect(blocky.IsRunning()).Should(BeFalse())
-				Expect(getContainerLogs(ctx, blocky)).
+				Expect(e2eutil.GetContainerLogs(ctx, blocky)).
 					Should(ContainElement(ContainSubstring("no valid upstream for group default")))
 			})
 		})
@@ -95,7 +97,7 @@ var _ = Describe("Upstream resolver configuration tests", func() {
 			})
 			It("should not start", func(ctx context.Context) {
 				Expect(blocky.IsRunning()).Should(BeFalse())
-				Expect(getContainerLogs(ctx, blocky)).
+				Expect(e2eutil.GetContainerLogs(ctx, blocky)).
 					Should(ContainElement(ContainSubstring("no valid upstream for group default")))
 			})
 		})
