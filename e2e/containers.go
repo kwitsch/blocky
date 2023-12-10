@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/0xERR0R/blocky/e2e/modules/mokka"
 	. "github.com/0xERR0R/blocky/e2e/util"
 	log "github.com/sirupsen/logrus"
 
@@ -34,21 +35,13 @@ const (
 	blockyImage       = "blocky-e2e"
 )
 
-func createDNSMokkaContainer(ctx context.Context, alias string, rules ...string) (testcontainers.Container, error) {
-	mokaRules := make(map[string]string)
-
-	for i, rule := range rules {
-		mokaRules[fmt.Sprintf("MOKKA_RULE_%d", i)] = rule
-	}
-
-	req := testcontainers.ContainerRequest{
-		Image:        mokaImage,
-		ExposedPorts: []string{"53/tcp", "53/udp"},
-		WaitingFor:   wait.ForExposedPort(),
-		Env:          mokaRules,
-	}
-
-	return DeferTerminate(startGenericContainer(ctx, alias, req))
+func createDNSMokkaContainer(ctx context.Context, alias string, rules ...string) (*mokka.MokkaContainer, error) {
+	return DeferTerminate(mokka.RunContainer(ctx,
+		testcontainers.WithImage(mokaImage),
+		mokka.WithMokkaRules(rules...),
+		mokka.WithDNSRequestTimeout(time.Second),
+		WithNetwork(ctx, alias),
+	))
 }
 
 func createHTTPServerContainer(ctx context.Context, alias string, tmpDir *helpertest.TmpFolder,
