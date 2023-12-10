@@ -22,10 +22,3 @@ func TestE2E(t *testing.T) {
 var _ = BeforeSuite(func(ctx context.Context) {
 	SetDefaultEventuallyTimeout(5 * time.Second)
 })
-
-var _ = SynchronizedAfterSuite(func() {}, func(ctx context.Context) {
-	for _, network := range networks {
-		err := network.Remove(ctx)
-		Expect(err).Should(Succeed())
-	}
-})

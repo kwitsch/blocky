@@ -3,13 +3,12 @@ package e2e
 import (
 	"context"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"strings"
 	"time"
 
-	e2eutil "github.com/0xERR0R/blocky/e2e/util"
+	. "github.com/0xERR0R/blocky/e2e/util"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/0xERR0R/blocky/config"
@@ -19,7 +18,6 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/go-connections/nat"
 	"github.com/miekg/dns"
-	"github.com/onsi/ginkgo/v2"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/mariadb"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
@@ -36,16 +34,6 @@ const (
 	blockyImage       = "blocky-e2e"
 )
 
-// networks is a list of networks created by WithNetwork for cleanup purpose
-//
-//nolint:gochecknoglobals
-var networks = []testcontainers.Network{}
-
-// getNetworkName returns a unique network name for the current test process
-func getNetworkName() string {
-	return fmt.Sprintf("blocky-e2e-network_%d", ginkgo.GinkgoParallelProcess())
-}
-
 func createDNSMokkaContainer(ctx context.Context, alias string, rules ...string) (testcontainers.Container, error) {
 	mokaRules := make(map[string]string)
 
@@ -60,7 +48,7 @@ func createDNSMokkaContainer(ctx context.Context, alias string, rules ...string)
 		Env:          mokaRules,
 	}
 
-	return e2eutil.DeferTerminate(startGenericContainer(ctx, alias, req))
+	return DeferTerminate(startGenericContainer(ctx, alias, req))
 }
 
 func createHTTPServerContainer(ctx context.Context, alias string, tmpDir *helpertest.TmpFolder,
@@ -86,7 +74,7 @@ func createHTTPServerContainer(ctx context.Context, alias string, tmpDir *helper
 		},
 	}
 
-	return e2eutil.DeferTerminate(startGenericContainer(ctx, alias, req))
+	return DeferTerminate(startGenericContainer(ctx, alias, req))
 }
 
 // startGenericContainer starts a container with the given request and attaches it to the test network
@@ -101,47 +89,8 @@ func startGenericContainer(ctx context.Context, alias string, req testcontainers
 	return testcontainers.GenericContainer(ctx, greq)
 }
 
-// WithNetwork attaches the container with the given alias to the test network
-func WithNetwork(ctx context.Context, alias string) testcontainers.CustomizeRequestOption {
-	return func(req *testcontainers.GenericContainerRequest) {
-		networkName := getNetworkName()
-
-		network, err := testcontainers.GenericNetwork(ctx, testcontainers.GenericNetworkRequest{
-			NetworkRequest: testcontainers.NetworkRequest{
-				Name:           networkName,
-				CheckDuplicate: true, // force the Docker provider to reuse an existing network
-				Attachable:     true,
-			},
-		})
-		if err != nil && !strings.Contains(err.Error(), "already exists") {
-			logger := req.Logger
-			if logger == nil {
-				logger = testcontainers.Logger
-			}
-
-			logger.Printf("Failed to create network '%s'. Container won't be attached to this network: %v",
-				networkName, err)
-
-			return
-		}
-
-		if err == nil {
-			networks = append(networks, network)
-		}
-
-		// attaching to the network because it was created with success or it already existed.
-		req.Networks = append(req.Networks, networkName)
-
-		if req.NetworkAliases == nil {
-			req.NetworkAliases = make(map[string][]string)
-		}
-
-		req.NetworkAliases[networkName] = []string{alias}
-	}
-}
-
 func createRedisContainer(ctx context.Context) (*redis.RedisContainer, error) {
-	return e2eutil.DeferTerminate(redis.RunContainer(ctx,
+	return DeferTerminate(redis.RunContainer(ctx,
 		testcontainers.WithImage(redisImage),
 		redis.WithLogLevel(redis.LogLevelVerbose),
 		WithNetwork(ctx, "redis"),
@@ -151,7 +100,7 @@ func createRedisContainer(ctx context.Context) (*redis.RedisContainer, error) {
 func createPostgresContainer(ctx context.Context) (*postgres.PostgresContainer, error) {
 	const waitLogOccurrence = 2
 
-	return e2eutil.DeferTerminate(postgres.RunContainer(ctx,
+	return DeferTerminate(postgres.RunContainer(ctx,
 		testcontainers.WithImage(postgresImage),
 
 		postgres.WithDatabase("user"),
@@ -166,7 +115,7 @@ func createPostgresContainer(ctx context.Context) (*postgres.PostgresContainer, 
 }
 
 func createMariaDBContainer(ctx context.Context) (*mariadb.MariaDBContainer, error) {
-	return e2eutil.DeferTerminate(mariadb.RunContainer(ctx,
+	return DeferTerminate(mariadb.RunContainer(ctx,
 		testcontainers.WithImage(mariaDBImage),
 		mariadb.WithDatabase("user"),
 		mariadb.WithUsername("user"),
@@ -212,15 +161,8 @@ func createBlockyContainer(ctx context.Context, tmpDir *helpertest.TmpFolder,
 		WaitingFor: wait.ForHealthCheck().WithStartupTimeout(startupTimeout),
 	}
 
-	container, err := e2eutil.DeferTerminate(startGenericContainer(ctx, "blocky", req))
+	container, err := DeferTerminate(startGenericContainer(ctx, "blocky", req))
 	if err != nil {
-		// attach container log if error occurs
-		if r, err := container.Logs(ctx); err == nil {
-			if b, err := io.ReadAll(r); err == nil {
-				ginkgo.AddReportEntry("blocky container log", string(b))
-			}
-		}
-
 		return container, err
 	}
 

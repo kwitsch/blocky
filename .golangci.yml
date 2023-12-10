@@ -84,6 +84,7 @@ linters-settings:
       - "github.com/onsi/gomega"
       - "github.com/0xERR0R/blocky/config/migration"
       - "github.com/0xERR0R/blocky/helpertest"
+      - "github.com/0xERR0R/blocky/e2e/util"
   revive:
     rules:
       - name: dot-imports
