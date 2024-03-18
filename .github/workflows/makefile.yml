@@ -49,6 +49,22 @@ jobs:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v4
 
+      - name: Populate Makefile variables
+        id: get_vars
+        shell: bash
+        run: |
+          VERSION=$(git describe --always --tags)
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "VERSION: ${VERSION}"
+
+          BUILD_TIME=$(date --iso-8601=seconds)
+          echo "build_time=${BUILD_TIME}" >> $GITHUB_OUTPUT
+          echo "BUILD_TIME: ${BUILD_TIME}"
+
+          DOC_PATH="main"
+          echo "doc_path=${DOC_PATH}" >> $GITHUB_OUTPUT
+          echo "DOC_PATH: ${DOC_PATH}"
+
       - name: Setup Golang
         uses: actions/setup-go@v5
         if: matrix.go == true
@@ -63,11 +79,29 @@ jobs:
         uses: docker/setup-buildx-action@v3
         if: matrix.docker == true
 
+      - name: Build Docker image with Github cache
+        uses: docker/build-push-action@v5
+        if: matrix.docker == true
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          tags: prebuild
+          build-args: |
+            VERSION=${{ steps.get_vars.outputs.version }}
+            BUILD_TIME=${{ steps.get_vars.outputs.build_time }}
+            DOC_PATH=${{ steps.get_vars.outputs.doc_path }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
       - name: make ${{ matrix.make }}
         run: make ${{ matrix.make }}
         if: matrix.make != 'goreleaser'
         env:
           GO_SKIP_GENERATE: 1
+          VERSION: ${{ steps.get_vars.outputs.version }}
+          BUILD_TIME: ${{ steps.get_vars.outputs.build_time }}
+          DOC_PATH: ${{ steps.get_vars.outputs.doc_path }}
 
       - name: Upload results to codecov
         uses: codecov/codecov-action@v4
