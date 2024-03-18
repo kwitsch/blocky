@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  GINKGO_PROCS: --procs=1
+  GINKGO_PROCS: --procs=2
 
 jobs:
   make:
