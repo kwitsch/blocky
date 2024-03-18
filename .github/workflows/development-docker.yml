@@ -111,7 +111,7 @@ jobs:
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
           echo "VERSION: ${VERSION}"
 
-          BUILD_TIME=$(date --iso-8601=seconds)
+          BUILD_TIME=${{ github.event.repository.updated_at}}
           echo "build_time=${BUILD_TIME}" >> $GITHUB_OUTPUT
           echo "BUILD_TIME: ${BUILD_TIME}"
 

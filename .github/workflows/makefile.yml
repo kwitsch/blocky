@@ -48,12 +48,14 @@ jobs:
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Populate Makefile variables
         id: get_vars
         shell: bash
         run: |
-          VERSION=v0.0
+          VERSION=$(git describe --always --tags)
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
           echo "VERSION: ${VERSION}"
 
